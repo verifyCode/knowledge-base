@@ -1,0 +1,1653 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>File Browser</title>
+<style>
+/* ============ Reset & Variables ============ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #1a1b26;
+  --bg-secondary: #1f2335;
+  --bg-tertiary: #292e42;
+  --border: #3b4261;
+  --text: #c0caf5;
+  --text-muted: #565f89;
+  --text-bright: #e0e2f0;
+  --accent: #7aa2f7;
+  --accent-dim: #3d59a1;
+  --folder: #e0af68;
+  --file: #7aa2f7;
+  --image: #9ece6a;
+  --code: #bb9af7;
+  --json: #f3d967;
+  --markdown: #73daca;
+  --error: #f7768e;
+  --success: #9ece6a;
+  --warning: #e0af68;
+  --font-mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --sidebar-width: 320px;
+  --line-number-color: #3b4261;
+}
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ============ Top Bar ============ */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.topbar .logo {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+  cursor: pointer;
+}
+.topbar .logo:hover { opacity: 0.8; }
+.topbar .sep {
+  color: var(--border);
+  font-size: 18px;
+  line-height: 1;
+}
+.topbar .breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  overflow: hidden;
+}
+.topbar .breadcrumb button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.topbar .breadcrumb button:hover {
+  color: var(--text-bright);
+  background: var(--bg-tertiary);
+}
+.topbar .breadcrumb button.current {
+  color: var(--text-bright);
+  font-weight: 600;
+}
+.topbar .breadcrumb .slash {
+  color: var(--border);
+  font-size: 13px;
+  margin: 0 1px;
+}
+.topbar .actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+.topbar .actions button {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+}
+.topbar .actions button:hover {
+  color: var(--text-bright);
+  border-color: var(--text-muted);
+}
+.topbar .actions button.fav-star {
+  font-size: 15px;
+  padding: 2px 8px;
+  line-height: 1;
+  border-color: transparent;
+  background: transparent;
+}
+.topbar .actions button.fav-star.active {
+  color: #e0af68;
+}
+.topbar .actions button.fav-star:hover {
+  border-color: var(--border);
+}
+
+/* ============ Main Layout ============ */
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ============ Sidebar ============ */
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: 200px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sidebar-header .title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+.sidebar-header .count {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.tree-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 0;
+}
+.tree-container::-webkit-scrollbar { width: 6px; }
+.tree-container::-webkit-scrollbar-track { background: transparent; }
+.tree-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ============ Favorites Section ============ */
+.favorites-section {
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.favorites-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s;
+}
+.favorites-header:hover { background: var(--bg-tertiary); }
+.favorites-header .title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.favorites-header .arrow {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+}
+.favorites-header .arrow.expanded { transform: rotate(90deg); }
+.favorites-list {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 2px 0 6px;
+}
+.favorites-list::-webkit-scrollbar { width: 4px; }
+.favorites-list::-webkit-scrollbar-track { background: transparent; }
+.favorites-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.favorite-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.1s;
+}
+.favorite-item:hover { background: var(--bg-tertiary); }
+.favorite-item .name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.favorite-item .remove-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+}
+.favorite-item:hover .remove-btn { opacity: 1; }
+.favorite-item .remove-btn:hover { color: var(--error); }
+.favorites-empty {
+  padding: 6px 14px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+/* ============ Tree Items ============ */
+.tree-item {
+  display: flex;
+  align-items: center;
+  padding: 3px 14px;
+  padding-left: calc(14px + var(--depth, 0) * 16px);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  gap: 6px;
+  line-height: 1.9;
+  user-select: none;
+  border-left: 2px solid transparent;
+  transition: background 0.1s;
+}
+.tree-item:hover { background: var(--bg-tertiary); }
+.tree-item.active {
+  background: var(--bg-tertiary);
+  border-left-color: var(--accent);
+  color: var(--text-bright);
+}
+.tree-item .icon {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  font-size: 14px;
+}
+.tree-item .icon.folder { color: var(--folder); }
+.tree-item .icon.file { color: var(--file); }
+.tree-item .icon.image { color: var(--image); }
+.tree-item .icon.markdown { color: var(--markdown); }
+.tree-item .icon.json { color: var(--json); }
+.tree-item .icon.code { color: var(--code); }
+.tree-item .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+.tree-item .arrow {
+  flex-shrink: 0;
+  width: 14px;
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+  text-align: center;
+  display: inline-block;
+}
+.tree-item .arrow.expanded { transform: rotate(90deg); }
+.tree-item .arrow.hidden { visibility: hidden; }
+
+/* ============ Resize Handle ============ */
+.resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 0.15s;
+  position: relative;
+}
+.resize-handle:hover,
+.resize-handle.active {
+  background: var(--accent-dim);
+}
+
+/* ============ Content Area ============ */
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+.content-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  font-size: 13px;
+}
+.content-header .file-icon { font-size: 18px; }
+.content-header .file-name {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-bright);
+}
+.content-header .file-meta {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 16px;
+}
+.content-body {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+.content-body::-webkit-scrollbar { width: 8px; height: 8px; }
+.content-body::-webkit-scrollbar-track { background: transparent; }
+.content-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ============ Code Viewer ============ */
+.code-viewer {
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  tab-size: 4;
+  min-height: 100%;
+}
+.line-numbers {
+  flex-shrink: 0;
+  padding: 12px 0;
+  text-align: right;
+  user-select: none;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  color: var(--line-number-color);
+  min-width: 48px;
+}
+.line-numbers span {
+  display: block;
+  padding: 0 14px 0 10px;
+}
+.code-content {
+  flex: 1;
+  padding: 12px 16px;
+  overflow: auto;
+  white-space: pre;
+  color: var(--text);
+}
+.code-content::-webkit-scrollbar { width: 6px; height: 6px; }
+.code-content::-webkit-scrollbar-track { background: transparent; }
+.code-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ============ Syntax Highlighting ============ */
+.hljs-comment { color: #565f89; font-style: italic; }
+.hljs-keyword { color: #bb9af7; }
+.hljs-string  { color: #9ece6a; }
+.hljs-number  { color: #ff9e64; }
+.hljs-regexp  { color: #f7768e; }
+
+/* ============ Welcome / Homepage ============ */
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  overflow-y: auto;
+  padding: 40px 20px 60px;
+}
+.welcome::-webkit-scrollbar { width: 6px; }
+.welcome::-webkit-scrollbar-track { background: transparent; }
+.welcome::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.welcome-hero {
+  text-align: center;
+  padding: 40px 20px 32px;
+  flex-shrink: 0;
+}
+.welcome-hero .hero-icon {
+  font-size: 56px;
+  margin-bottom: 12px;
+  opacity: 0.85;
+}
+.welcome-hero .hero-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-bright);
+  margin-bottom: 6px;
+}
+.welcome-hero .hero-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+.welcome-hero .btn-open {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: opacity 0.15s, transform 0.1s;
+}
+.welcome-hero .btn-open:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.welcome-favorites {
+  width: 100%;
+  max-width: 640px;
+  flex-shrink: 0;
+}
+.welcome-favorites .section-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.fav-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+}
+.fav-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  text-decoration: none;
+  color: var(--text);
+}
+.fav-card:hover {
+  border-color: var(--accent-dim);
+  background: var(--bg-tertiary);
+}
+.fav-card .card-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+.fav-card .card-info {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+.fav-card .card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fav-card .card-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.welcome-favorites .empty-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  text-align: center;
+  padding: 20px 0;
+  line-height: 1.7;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  gap: 12px;
+}
+.empty-state .icon { font-size: 56px; opacity: 0.4; }
+.empty-state .msg { font-size: 15px; }
+.empty-state .hint { font-size: 12px; opacity: 0.6; }
+
+/* ============ Loading ============ */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+  gap: 8px;
+}
+.loading .spinner {
+  width: 14px; height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.tree-error {
+  padding: 12px 16px;
+  color: var(--error);
+  font-size: 13px;
+}
+
+/* ============ Browser Unsupported ============ */
+.unsupported {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 20px;
+}
+.unsupported .icon { font-size: 56px; }
+.unsupported .msg { font-size: 18px; color: var(--text-bright); font-weight: 600; }
+.unsupported .hint { font-size: 13px; opacity: 0.7; line-height: 1.6; max-width: 500px; }
+
+/* ============ View Toggle Button ============ */
+.content-header .view-toggle {
+  margin-left: auto;
+  margin-right: 16px;
+  display: flex;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.content-header .view-toggle button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  transition: all 0.15s;
+}
+.content-header .view-toggle button:hover {
+  color: var(--text-bright);
+  background: var(--bg);
+}
+.content-header .view-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ============ Markdown Preview ============ */
+.markdown-preview {
+  padding: 24px 32px;
+  max-width: 860px;
+  margin: 0 auto;
+  line-height: 1.75;
+  color: var(--text);
+}
+.markdown-preview h1, .markdown-preview h2, .markdown-preview h3,
+.markdown-preview h4, .markdown-preview h5, .markdown-preview h6 {
+  color: var(--text-bright);
+  margin: 24px 0 12px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+.markdown-preview h1 { font-size: 1.8em; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.markdown-preview h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.markdown-preview h3 { font-size: 1.25em; }
+.markdown-preview h4 { font-size: 1.1em; }
+.markdown-preview p { margin: 8px 0; }
+.markdown-preview a { color: var(--accent); text-decoration: none; }
+.markdown-preview a:hover { text-decoration: underline; }
+.markdown-preview strong { color: var(--text-bright); }
+.markdown-preview em { color: var(--text); }
+.markdown-preview code {
+  background: var(--bg-tertiary);
+  color: var(--code);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.markdown-preview pre {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 18px;
+  overflow-x: auto;
+  margin: 12px 0;
+}
+.markdown-preview pre code {
+  background: none;
+  color: var(--text);
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.markdown-preview blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 16px;
+  color: var(--text-muted);
+  margin: 12px 0;
+}
+.markdown-preview ul, .markdown-preview ol {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+.markdown-preview li { margin: 4px 0; }
+.markdown-preview li::marker { color: var(--text-muted); }
+.markdown-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+}
+.markdown-preview th, .markdown-preview td {
+  border: 1px solid var(--border);
+  padding: 8px 14px;
+  text-align: left;
+}
+.markdown-preview th {
+  background: var(--bg-secondary);
+  color: var(--text-bright);
+  font-weight: 600;
+}
+.markdown-preview tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+.markdown-preview hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 24px 0;
+}
+.markdown-preview img { max-width: 100%; border-radius: 6px; }
+.markdown-preview input[type="checkbox"] {
+  margin-right: 6px;
+  accent-color: var(--accent);
+}
+
+/* ============ HTML Preview ============ */
+.html-preview {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
+/* ============ Responsive ============ */
+@media (max-width: 600px) {
+  .sidebar { width: 100% !important; min-width: 0; }
+  .main { flex-direction: column; }
+  .resize-handle { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <span class="logo" id="logo" title="重新选择目录">📁 File Browser</span>
+  <span class="sep">/</span>
+  <div class="breadcrumb" id="breadcrumb"></div>
+  <div class="actions">
+    <button id="btnFavorite" class="fav-star" title="收藏当前目录">☆</button>
+    <button id="btnHidden" title="Toggle hidden files">👁 隐藏文件</button>
+    <button id="btnRefresh" title="Refresh">🔄 刷新</button>
+  </div>
+</div>
+
+<!-- Main Layout -->
+<div class="main" id="mainLayout" style="display:none;">
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span class="title">文件目录</span>
+      <span class="count" id="itemCount">—</span>
+    </div>
+    <div class="favorites-section" id="favoritesSection" style="display:none;">
+      <div class="favorites-header" id="favoritesHeader">
+        <span class="title">⭐ 收藏夹</span>
+        <span class="arrow expanded" id="favArrow">▶</span>
+      </div>
+      <div class="favorites-list" id="favoritesList"></div>
+    </div>
+    <div class="tree-container" id="tree"></div>
+  </div>
+
+  <!-- Resize Handle -->
+  <div class="resize-handle" id="resizeHandle"></div>
+
+  <!-- Content Area -->
+  <div class="content" id="contentArea">
+    <div class="content-header" id="contentHeader"></div>
+    <div class="content-body" id="contentBody">
+      <div class="empty-state">
+        <div class="icon">📂</div>
+        <div class="msg">选择一个文件查看内容</div>
+        <div class="hint">在左侧目录树中点击文件</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Welcome Screen -->
+<div class="welcome" id="welcome">
+  <div class="welcome-hero">
+    <div class="hero-icon">📁</div>
+    <div class="hero-title">File Browser</div>
+    <div class="hero-sub">
+      使用浏览器原生 File System Access API 浏览本地文件<br>
+      无需上传，所有数据仅在本地读取 · Chrome / Edge / Opera 支持
+    </div>
+    <button class="btn-open" id="btnOpen">📂 选择文件夹</button>
+  </div>
+  <div class="welcome-favorites" id="welcomeFavorites" style="display:none;">
+    <div class="section-title">⭐ 收藏夹</div>
+    <div class="fav-cards" id="favCards"></div>
+  </div>
+</div>
+
+<script>
+// ============ Check Browser Support ============
+if (typeof window.showDirectoryPicker !== 'function') {
+  document.getElementById('welcome').innerHTML = `
+    <div class="unsupported">
+      <div class="icon">⚠️</div>
+      <div class="msg">浏览器不支持 File System Access API</div>
+      <div class="hint">
+        请使用 Chrome 86+ / Edge 86+ / Opera 72+ 打开此页面<br><br>
+        Firefox 和 Safari 暂不支持本地文件系统访问 API
+      </div>
+    </div>`;
+}
+
+// ============ Globals ============
+let rootHandle = null;                // FileSystemDirectoryHandle
+let rootName = '';                   // Display name of root
+const handleMap = new Map();         // path → FileSystemHandle (dir or file)
+const MAX_FILE_SIZE = 2 * 1024 * 1024;
+
+const TEXT_EXTENSIONS = new Set([
+  '.js','.ts','.jsx','.tsx','.mjs','.cjs','.vue','.svelte',
+  '.py','.rb','.go','.rs','.java','.kt','.scala','.clj',
+  '.c','.cpp','.h','.hpp','.cs','.swift','.m','.mm',
+  '.php','.pl','.sh','.bash','.zsh','.fish',
+  '.r','.jl','.lua','.dart','.ex','.exs',
+  '.html','.htm','.css','.scss','.sass','.less',
+  '.json','.xml','.yaml','.yml','.toml','.ini','.cfg',
+  '.md','.mdx','.rst','.txt','.log',
+  '.env','.gitignore','.dockerignore','.editorconfig',
+  '.eslintrc','.prettierrc','.babelrc',
+  '.svg','.graphql','.gql','.sql','.prisma',
+]);
+
+function isTextFile(name) {
+  const ext = name.split('.').pop();
+  if (!ext) return false;
+  return TEXT_EXTENSIONS.has('.' + ext.toLowerCase());
+}
+
+// ============ State ============
+const state = {
+  expandedDirs: new Set(),
+  currentFilePath: null,
+  currentDirPath: '', // the directory whose tree children are visible
+  showHidden: false,
+  viewMode: 'source',      // 'source' | 'preview'
+  lastFileContent: null,   // cached raw content for fast source/preview toggle
+  lastFileName: null,
+  lastFileSize: 0,
+  lastFileModified: null,
+};
+
+// File types that support preview
+const PREVIEW_TYPES = new Set(['md', 'mdx', 'markdown', 'html', 'htm']);
+
+function isPreviewable(name) {
+  const ext = name.split('.').pop();
+  if (!ext) return false;
+  return PREVIEW_TYPES.has(ext.toLowerCase());
+}
+
+// ============ DOM Refs ============
+const $mainLayout = document.getElementById('mainLayout');
+const $welcome = document.getElementById('welcome');
+const $tree = document.getElementById('tree');
+const $breadcrumb = document.getElementById('breadcrumb');
+const $contentHeader = document.getElementById('contentHeader');
+const $contentBody = document.getElementById('contentBody');
+const $itemCount = document.getElementById('itemCount');
+const $btnHidden = document.getElementById('btnHidden');
+const $btnRefresh = document.getElementById('btnRefresh');
+const $btnOpen = document.getElementById('btnOpen');
+const $btnFavorite = document.getElementById('btnFavorite');
+const $logo = document.getElementById('logo');
+const $sidebar = document.getElementById('sidebar');
+const $resizeHandle = document.getElementById('resizeHandle');
+const $favoritesSection = document.getElementById('favoritesSection');
+const $favoritesList = document.getElementById('favoritesList');
+const $favoritesHeader = document.getElementById('favoritesHeader');
+const $favArrow = document.getElementById('favArrow');
+const $welcomeFavorites = document.getElementById('welcomeFavorites');
+const $favCards = document.getElementById('favCards');
+
+// ============ IndexedDB Favorites ============
+const DB_NAME = 'file-browser';
+const DB_VERSION = 1;
+const STORE_NAME = 'favorites';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(STORE_NAME)) {
+        req.result.createObjectStore(STORE_NAME, { keyPath: 'name' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function loadFavorites() {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+  } catch { return []; }
+}
+
+async function addFavorite(name, handle) {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put({ name, handle, addedAt: Date.now() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => { throw tx.error; };
+    });
+  } catch (e) { console.error('Add favorite failed:', e); }
+}
+
+async function removeFavorite(name) {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).delete(name);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch { /* ignore */ }
+}
+
+async function getFavoriteHandle(name) {
+  try {
+    const db = await openDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get(name);
+      req.onsuccess = () => resolve(req.result ? req.result.handle : null);
+      req.onerror = () => resolve(null);
+    });
+  } catch { return null; }
+}
+
+// ============ Favorites UI ============
+let favoritesExpanded = true;
+
+function renderFavoritesList(favorites) {
+  if (favorites.length === 0) {
+    $favoritesList.innerHTML = '<div class="favorites-empty">暂无收藏 — 打开文件夹后点击 ☆ 收藏</div>';
+  } else {
+    $favoritesList.innerHTML = favorites.map(f => `
+      <div class="favorite-item" data-fav-name="${escapeHtml(f.name)}">
+        <span style="flex-shrink:0;">📁</span>
+        <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
+        <button class="remove-btn" title="取消收藏">✕</button>
+      </div>`).join('');
+  }
+  $favoritesSection.style.display = 'block';
+}
+
+function renderWelcomeFavorites(favorites) {
+  if (favorites.length === 0) {
+    $welcomeFavorites.style.display = 'none';
+    return;
+  }
+  $welcomeFavorites.style.display = '';
+  // Sort by most recently added first
+  const sorted = [...favorites].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+  $favCards.innerHTML = sorted.map(f => `
+    <div class="fav-card" data-fav-name="${escapeHtml(f.name)}">
+      <span class="card-icon">📁</span>
+      <div class="card-info">
+        <div class="card-name">${escapeHtml(f.name)}</div>
+        <div class="card-meta">${f.addedAt ? timeAgo(f.addedAt) : ''}</div>
+      </div>
+    </div>`).join('');
+}
+
+function timeAgo(ts) {
+  const sec = Math.floor((Date.now() - ts) / 1000);
+  if (sec < 60) return '刚刚';
+  if (sec < 3600) return Math.floor(sec / 60) + ' 分钟前';
+  if (sec < 86400) return Math.floor(sec / 3600) + ' 小时前';
+  if (sec < 604800) return Math.floor(sec / 86400) + ' 天前';
+  return new Date(ts).toLocaleDateString('zh-CN');
+}
+
+function updateStarButton() {
+  if (!rootHandle) {
+    $btnFavorite.textContent = '☆';
+    $btnFavorite.classList.remove('active');
+    $btnFavorite.title = '选择文件夹后可收藏';
+    return;
+  }
+  isCurrentFavorited().then(yes => {
+    $btnFavorite.textContent = yes ? '★' : '☆';
+    if (yes) {
+      $btnFavorite.classList.add('active');
+      $btnFavorite.title = '取消收藏';
+    } else {
+      $btnFavorite.classList.remove('active');
+      $btnFavorite.title = '收藏当前目录';
+    }
+  });
+}
+
+async function isCurrentFavorited() {
+  if (!rootHandle) return false;
+  const favs = await loadFavorites();
+  return favs.some(f => f.name === rootName);
+}
+
+async function refreshFavorites() {
+  const favs = await loadFavorites();
+  // Update both sidebar and welcome screen
+  if (favs.length > 0) {
+    renderFavoritesList(favs);
+    renderWelcomeFavorites(favs);
+  } else {
+    $favoritesSection.style.display = 'none';
+    $welcomeFavorites.style.display = 'none';
+  }
+  updateStarButton();
+}
+
+// ============ Open Directory ============
+$btnOpen.addEventListener('click', selectDirectory);
+$logo.addEventListener('click', selectDirectory);
+
+async function selectDirectory() {
+  try {
+    rootHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    // Actually we only need read, but 'readwrite' is more compatible
+    rootName = rootHandle.name;
+    handleMap.clear();
+    state.expandedDirs.clear();
+    state.currentFilePath = null;
+    state.currentDirPath = '';
+
+    // Switch to main layout
+    $welcome.style.display = 'none';
+    $mainLayout.style.display = 'flex';
+    $contentHeader.innerHTML = '';
+    $contentBody.innerHTML = `<div class="empty-state">
+      <div class="icon">📂</div>
+      <div class="msg">选择一个文件查看内容</div>
+      <div class="hint">在左侧目录树中点击文件</div>
+    </div>`;
+
+    // Load root
+    await loadDirectory('');
+    await refreshFavorites();
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      console.error('Failed to open directory:', err);
+    }
+  }
+}
+
+// ============ Helpers ============
+function joinPath(a, b) {
+  if (!a) return b;
+  return a + '/' + b;
+}
+
+function getParentPath(p) {
+  const i = p.lastIndexOf('/');
+  return i === -1 ? '' : p.slice(0, i);
+}
+
+// ============ Load Directory ============
+async function loadDirectory(dirPath) {
+  state.currentDirPath = dirPath;
+
+  // Get the directory handle
+  let handle;
+  if (!dirPath) {
+    handle = rootHandle;
+  } else {
+    handle = handleMap.get(dirPath);
+  }
+
+  if (!handle || handle.kind !== 'directory') {
+    $tree.innerHTML = `<div class="tree-error">⚠️ 无法读取目录</div>`;
+    return;
+  }
+
+  $tree.innerHTML = '<div class="loading"><span class="spinner"></span> 加载中...</div>';
+
+  try {
+    const entries = [];
+    for await (const [name, entry] of handle.entries()) {
+      // Filter hidden files
+      if (!state.showHidden && name.startsWith('.')) continue;
+      const entryPath = joinPath(dirPath, name);
+      handleMap.set(entryPath, entry);
+      entries.push({ name, entry, path: entryPath });
+    }
+
+    // Sort: directories first, then alphabetical
+    entries.sort((a, b) => {
+      const aDir = a.entry.kind === 'directory';
+      const bDir = b.entry.kind === 'directory';
+      if (aDir && !bDir) return -1;
+      if (!aDir && bDir) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    $itemCount.textContent = `${entries.length} 项`;
+
+    const depth = 0;
+    const treeHtml = entries.length > 0
+      ? entries.map(e => renderTreeItem(e.name, e.path, e.entry.kind === 'directory', depth)).join('')
+      : '<div style="padding:16px;color:var(--text-muted);font-size:13px;">（空目录）</div>';
+
+    $tree.innerHTML = treeHtml;
+    updateBreadcrumb(dirPath);
+
+    // Restore expanded state for subdirectories
+    for (const entry of entries) {
+      if (entry.entry.kind === 'directory' && state.expandedDirs.has(entry.path)) {
+        await loadChildDirectory(entry.path, depth + 1);
+      }
+    }
+
+    // Restore active file highlight
+    if (state.currentFilePath) {
+      const activeEl = $tree.querySelector(`[data-path="${escapeHtml(state.currentFilePath)}"]`);
+      if (activeEl) activeEl.classList.add('active');
+    }
+  } catch (err) {
+    $tree.innerHTML = `<div class="tree-error">⚠️ ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function loadChildDirectory(dirPath, depth) {
+  const container = $tree.querySelector(`.tree-children[data-parent="${escapeHtml(dirPath)}"]`);
+  if (!container) return;
+
+  const handle = handleMap.get(dirPath);
+  if (!handle || handle.kind !== 'directory') return;
+
+  try {
+    const entries = [];
+    for await (const [name, entry] of handle.entries()) {
+      if (!state.showHidden && name.startsWith('.')) continue;
+      const entryPath = joinPath(dirPath, name);
+      handleMap.set(entryPath, entry);
+      entries.push({ name, entry, path: entryPath });
+    }
+
+    entries.sort((a, b) => {
+      const aDir = a.entry.kind === 'directory';
+      const bDir = b.entry.kind === 'directory';
+      if (aDir && !bDir) return -1;
+      if (!aDir && bDir) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    container.innerHTML = entries.length > 0
+      ? entries.map(e => renderTreeItem(e.name, e.path, e.entry.kind === 'directory', depth)).join('')
+      : `<div style="padding:4px 20px;color:var(--text-muted);font-size:12px;padding-left:${14 + depth * 16 + 30}px;">（空）</div>`;
+
+    // Recurse for already-expanded subdirectories
+    for (const entry of entries) {
+      if (entry.entry.kind === 'directory' && state.expandedDirs.has(entry.path)) {
+        await loadChildDirectory(entry.path, depth + 1);
+      }
+    }
+  } catch (err) {
+    container.innerHTML = `<div class="tree-error" style="padding-left:${14 + depth * 16 + 30}px;">⚠️ ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+// ============ Tree Rendering ============
+function renderTreeItem(name, fullPath, isDir, depth) {
+  const icon = getFileIcon(name, isDir);
+  const isExpanded = isDir && state.expandedDirs.has(fullPath);
+  const isActive = state.currentFilePath === fullPath;
+
+  let html = `<div class="tree-item${isActive ? ' active' : ''}" style="--depth:${depth}"
+                  data-path="${escapeHtml(fullPath)}" data-dir="${isDir ? 'true' : 'false'}" data-depth="${depth}">
+               <span class="arrow${isDir ? '' : ' hidden'}${isExpanded ? ' expanded' : ''}">▶</span>
+               <span class="icon ${icon.cls}">${icon.emoji}</span>
+               <span class="name">${escapeHtml(name)}</span>
+             </div>`;
+
+  if (isDir && isExpanded) {
+    html += `<div class="tree-children" data-parent="${escapeHtml(fullPath)}"></div>`;
+  }
+
+  return html;
+}
+
+// ============ Icons ============
+function getFileIcon(name, isDir) {
+  if (isDir) return { emoji: '📁', cls: 'folder' };
+  const ext = name.split('.').pop().toLowerCase();
+  const map = {
+    png: ['🖼️','image'], jpg: ['🖼️','image'], jpeg: ['🖼️','image'], gif: ['🖼️','image'],
+    svg: ['🖼️','image'], ico: ['🖼️','image'], webp: ['🖼️','image'], bmp: ['🖼️','image'],
+    md: ['📝','markdown'], mdx: ['📝','markdown'], txt: ['📄','file'], rst: ['📄','file'],
+    json: ['📋','json'], yaml: ['⚙️','json'], yml: ['⚙️','json'],
+    toml: ['⚙️','json'], xml: ['📋','json'],
+    html: ['🌐','code'], htm: ['🌐','code'], css: ['🎨','code'],
+    scss: ['🎨','code'], sass: ['🎨','code'], less: ['🎨','code'],
+    js: ['📜','code'], ts: ['📘','code'], jsx: ['📜','code'], tsx: ['📘','code'],
+    mjs: ['📜','code'], vue: ['💚','code'], svelte: ['🧡','code'],
+    py: ['🐍','code'], rb: ['💎','code'], go: ['🔷','code'],
+    rs: ['🦀','code'], java: ['☕','code'], kt: ['💜','code'],
+    c: ['⚡','code'], cpp: ['⚡','code'], h: ['⚡','code'], hpp: ['⚡','code'],
+    cs: ['🔷','code'], swift: ['🍎','code'], php: ['🐘','code'],
+    sh: ['💻','code'], bash: ['💻','code'], zsh: ['💻','code'],
+    lua: ['🌙','code'], r: ['📊','code'], sql: ['🗄️','code'],
+    dockerfile: ['🐳','code'], env: ['🔒','code'],
+  };
+  const entry = map[ext];
+  if (entry) return { emoji: entry[0], cls: entry[1] };
+  const lc = name.toLowerCase();
+  if (lc.startsWith('dockerfile')) return { emoji: '🐳', cls: 'code' };
+  if (lc === 'makefile' || lc === 'cmakelists.txt') return { emoji: '⚙️', cls: 'code' };
+  if (lc === '.gitignore' || lc === '.dockerignore') return { emoji: '🙈', cls: 'code' };
+  if (lc.startsWith('license')) return { emoji: '📜', cls: 'code' };
+  return { emoji: '📄', cls: 'file' };
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ============ Load File ============
+async function loadFile(filePath) {
+  state.currentFilePath = filePath;
+  state.viewMode = isPreviewable(filePath) ? 'preview' : 'source';
+  const handle = handleMap.get(filePath);
+
+  if (!handle || handle.kind !== 'file') {
+    $contentHeader.innerHTML = '';
+    $contentBody.innerHTML = `<div class="empty-state">
+      <div class="icon">⚠️</div><div class="msg">无法读取文件</div><div class="hint">文件句柄不存在</div></div>`;
+    return;
+  }
+
+  try {
+    const file = await handle.getFile();
+    const name = file.name;
+
+    if (!isTextFile(name)) {
+      $contentHeader.innerHTML = '';
+      $contentBody.innerHTML = `<div class="empty-state">
+        <div class="icon">📄</div><div class="msg">不支持预览此文件类型</div><div class="hint">${escapeHtml(name)} — 仅支持文本类文件</div></div>`;
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      $contentHeader.innerHTML = '';
+      $contentBody.innerHTML = `<div class="empty-state">
+        <div class="icon">⚠️</div><div class="msg">文件过大</div><div class="hint">${formatSize(file.size)} 超过 ${formatSize(MAX_FILE_SIZE)} 限制</div></div>`;
+      return;
+    }
+
+    const content = await file.text();
+    renderFileContent(name, file.size, file.lastModified, content, filePath);
+
+    // Update tree highlight
+    document.querySelectorAll('.tree-item.active').forEach(el => el.classList.remove('active'));
+    const activeEl = $tree.querySelector(`[data-path="${escapeHtml(filePath)}"]`);
+    if (activeEl) activeEl.classList.add('active');
+
+  } catch (err) {
+    $contentHeader.innerHTML = '';
+    $contentBody.innerHTML = `<div class="empty-state">
+      <div class="icon">⚠️</div><div class="msg">读取失败</div><div class="hint">${escapeHtml(err.message)}</div></div>`;
+  }
+}
+
+function renderFileContent(name, size, modified, content, filePath) {
+  state.lastFileContent = content;
+  state.lastFileName = name;
+  state.lastFileSize = size;
+  state.lastFileModified = modified;
+
+  if (state.viewMode === 'preview' && isPreviewable(name)) {
+    renderPreview(name, content);
+    return;
+  }
+
+  // Source mode — code viewer
+  const lines = content.split('\n');
+  const lineCount = content.endsWith('\n') ? lines.length - 1 : lines.length;
+  const ext = name.split('.').pop().toLowerCase();
+
+  const lineNumbers = Array.from({ length: Math.max(lineCount, 1) }, (_, i) =>
+    `<span>${i + 1}</span>`
+  ).join('');
+
+  const highlighted = highlightCode(content, ext);
+
+  $contentBody.innerHTML = `
+    <div class="code-viewer">
+      <div class="line-numbers">${lineNumbers}</div>
+      <div class="code-content">${highlighted}</div>
+    </div>`;
+
+  updateContentHeader(name, size, modified, filePath);
+}
+
+function updateContentHeader(name, size, modified, filePath) {
+  const icon = getFileIcon(name, false);
+  const sizeStr = formatSize(size);
+  const dateStr = new Date(modified).toLocaleString('zh-CN');
+  const previewable = isPreviewable(name);
+  const isPreview = state.viewMode === 'preview' && previewable;
+
+  let toggleHtml = '';
+  if (previewable) {
+    toggleHtml = `<div class="view-toggle" id="viewToggle">
+      <button data-mode="source" class="${!isPreview ? 'active' : ''}">源码</button>
+      <button data-mode="preview" class="${isPreview ? 'active' : ''}">预览</button>
+    </div>`;
+  }
+
+  $contentHeader.innerHTML = `
+    <span class="file-icon ${icon.cls}">${icon.emoji}</span>
+    <span class="file-name">${escapeHtml(name)}</span>
+    ${toggleHtml}
+    <div class="file-meta">
+      <span>${escapeHtml(filePath)}</span>
+      <span>${sizeStr}</span>
+      <span>${dateStr}</span>
+    </div>`;
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+// ============ Breadcrumb ============
+function updateBreadcrumb(dirPath) {
+  if (!dirPath) {
+    $breadcrumb.innerHTML = `<button class="current">${escapeHtml(rootName)}</button>`;
+    return;
+  }
+  const parts = dirPath.split('/');
+  let html = '';
+  let accumulated = '';
+  for (let i = 0; i < parts.length; i++) {
+    accumulated += (accumulated ? '/' : '') + parts[i];
+    if (i > 0) html += '<span class="slash">/</span>';
+    if (i === parts.length - 1) {
+      html += `<button class="current">${escapeHtml(parts[i])}</button>`;
+    } else {
+      html += `<button data-nav="${escapeHtml(accumulated)}">${escapeHtml(parts[i])}</button>`;
+    }
+  }
+  if (!html) {
+    html = `<button class="current">${escapeHtml(rootName)}</button>`;
+  }
+  $breadcrumb.innerHTML = html;
+}
+
+// ============ Syntax Highlighting ============
+function highlightCode(code, ext) {
+  let escaped = code
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Comments
+  escaped = escaped.replace(/(\/\/.*$|\/\*[\s\S]*?\*\/|#.*$)/gm,
+    '<span class="hljs-comment">$1</span>');
+  // Strings
+  escaped = escaped.replace(/(["'`])(?:(?!\1|\\).|\\.)*\1/g,
+    '<span class="hljs-string">$&</span>');
+  // Numbers
+  escaped = escaped.replace(/\b(\d+\.?\d*)\b/g,
+    '<span class="hljs-number">$1</span>');
+  // Keywords
+  escaped = escaped.replace(/\b(import|export|default|from|return|function|const|let|var|if|else|for|while|do|switch|case|break|continue|class|extends|new|this|super|try|catch|finally|throw|async|await|yield|typeof|instanceof|in|of|public|private|protected|static|void|int|float|double|bool|boolean|string|true|false|null|undefined|None|True|False|def|pass|elif|end|begin|rescue|ensure|module|require|include|fn|pub|use|mod|impl|struct|enum|trait|match|where|package|interface|abstract|final|override|func|var|val|type|sealed|when|object|and|or|not|is|as|print|select|from|where|insert|update|delete|create|alter|drop|table|index|view|into|values|set|declare|exec|go|chan|defer|map|range)\b/g,
+    '<span class="hljs-keyword">$1</span>');
+
+  return escaped;
+}
+
+// ============ Preview Rendering ============
+let markedPromise = null;
+
+function loadMarked() {
+  if (markedPromise) return markedPromise;
+  markedPromise = new Promise((resolve, reject) => {
+    if (typeof marked !== 'undefined') { resolve(marked); return; }
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/marked@12/marked.min.js';
+    script.onload = () => {
+      if (typeof marked !== 'undefined' && marked.setOptions) {
+        marked.setOptions({ breaks: true, gfm: true });
+      }
+      resolve(marked);
+    };
+    script.onerror = () => reject(new Error('Failed to load marked.js'));
+    document.head.appendChild(script);
+  });
+  return markedPromise;
+}
+
+function isMarkdownFile(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  return ext === 'md' || ext === 'mdx' || ext === 'markdown';
+}
+
+function isHtmlFile(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  return ext === 'html' || ext === 'htm';
+}
+
+async function renderPreview(name, content) {
+  if (isMarkdownFile(name)) {
+    await renderMarkdownPreview(content);
+  } else if (isHtmlFile(name)) {
+    renderHtmlPreview(content);
+  }
+  updateContentHeader(name, state.lastFileSize, state.lastFileModified, state.currentFilePath);
+}
+
+async function renderMarkdownPreview(content) {
+  $contentBody.innerHTML = '<div class="loading"><span class="spinner"></span> 渲染预览中...</div>';
+  try {
+    await loadMarked();
+    const html = marked.parse(content);
+    $contentBody.innerHTML = `<div class="markdown-preview">${html}</div>`;
+  } catch (err) {
+    $contentBody.innerHTML = `<div class="empty-state">
+      <div class="icon">⚠️</div><div class="msg">Markdown 渲染失败</div><div class="hint">${escapeHtml(err.message)}</div></div>`;
+  }
+}
+
+function renderHtmlPreview(content) {
+  $contentBody.innerHTML = `<iframe class="html-preview" sandbox="allow-scripts allow-same-origin" srcdoc="${escapeHtml(content)}" title="HTML Preview"></iframe>`;
+}
+
+// ============ Event Handlers ============
+$tree.addEventListener('click', async (e) => {
+  const item = e.target.closest('.tree-item');
+  if (!item) return;
+
+  const dirPath = item.dataset.path;
+  const isDir = item.dataset.dir === 'true';
+
+  if (isDir) {
+    // Toggle expand/collapse
+    if (state.expandedDirs.has(dirPath)) {
+      // Collapse
+      state.expandedDirs.delete(dirPath);
+      const children = item.nextElementSibling;
+      if (children && children.classList.contains('tree-children')) {
+        children.remove();
+      }
+      const arrow = item.querySelector('.arrow');
+      if (arrow) arrow.classList.remove('expanded');
+    } else {
+      // Expand
+      state.expandedDirs.add(dirPath);
+      const arrow = item.querySelector('.arrow');
+      if (arrow) arrow.classList.add('expanded');
+      const childrenDiv = document.createElement('div');
+      childrenDiv.className = 'tree-children';
+      childrenDiv.dataset.parent = dirPath;
+      item.after(childrenDiv);
+      const depth = parseInt(item.dataset.depth || 0) + 1;
+      await loadChildDirectory(dirPath, depth);
+    }
+  } else {
+    // Open file
+    state.currentFilePath = dirPath;
+    await loadFile(dirPath);
+  }
+});
+
+$breadcrumb.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-nav]');
+  if (!btn) return;
+  const navPath = btn.dataset.nav;
+  navigateTo(navPath);
+});
+
+// View toggle (source / preview) — delegated on content header
+$contentHeader.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-mode]');
+  if (!btn) return;
+  const mode = btn.dataset.mode;
+  state.viewMode = mode;
+  // Re-render from cached content without re-reading the file
+  if (state.lastFileContent && state.lastFileName) {
+    renderFileContent(state.lastFileName, state.lastFileSize, state.lastFileModified, state.lastFileContent, state.currentFilePath);
+  }
+});
+
+function navigateTo(dirPath) {
+  state.expandedDirs.clear();
+  // Expand all ancestors
+  const parts = dirPath ? dirPath.split('/') : [];
+  let acc = '';
+  for (const part of parts) {
+    acc += (acc ? '/' : '') + part;
+    state.expandedDirs.add(acc);
+  }
+  state.currentFilePath = null;
+  state.currentDirPath = dirPath;
+  $contentHeader.innerHTML = '';
+  $contentBody.innerHTML = `<div class="empty-state">
+    <div class="icon">📂</div><div class="msg">选择一个文件查看内容</div>
+    <div class="hint">在左侧目录树中点击文件</div></div>`;
+  loadDirectory(dirPath);
+}
+
+$btnHidden.addEventListener('click', () => {
+  state.showHidden = !state.showHidden;
+  $btnHidden.textContent = state.showHidden ? '👁 隐藏文件 ✓' : '👁 隐藏文件';
+  // Reload current directory (will pick up the new showHidden setting)
+  loadDirectory(state.currentDirPath);
+});
+
+$btnRefresh.addEventListener('click', () => {
+  // Clear cached handles for the current directory to force re-read
+  loadDirectory(state.currentDirPath);
+  if (state.currentFilePath) loadFile(state.currentFilePath);
+});
+
+// Star button — add/remove current directory to favorites
+$btnFavorite.addEventListener('click', async () => {
+  if (!rootHandle) return;
+  const yes = await isCurrentFavorited();
+  if (yes) {
+    await removeFavorite(rootName);
+  } else {
+    await addFavorite(rootName, rootHandle);
+  }
+  await refreshFavorites();
+});
+
+// Favorites header — toggle expand/collapse
+$favoritesHeader.addEventListener('click', () => {
+  favoritesExpanded = !favoritesExpanded;
+  if (favoritesExpanded) {
+    $favArrow.classList.add('expanded');
+    $favoritesList.style.display = '';
+  } else {
+    $favArrow.classList.remove('expanded');
+    $favoritesList.style.display = 'none';
+  }
+});
+
+// Favorites list — click item to reopen, click remove to delete
+$favoritesList.addEventListener('click', async (e) => {
+  const removeBtn = e.target.closest('.remove-btn');
+  const item = e.target.closest('.favorite-item');
+
+  if (removeBtn) {
+    e.stopPropagation();
+    const name = item.dataset.favName;
+    await removeFavorite(name);
+    await refreshFavorites();
+    return;
+  }
+
+  if (item) {
+    await reopenFavorite(item.dataset.favName);
+  }
+});
+
+// Welcome page favorites cards — click to reopen
+$favCards.addEventListener('click', async (e) => {
+  const card = e.target.closest('.fav-card');
+  if (card) {
+    await reopenFavorite(card.dataset.favName);
+  }
+});
+
+// Shared: reopen a favorited directory by name
+async function reopenFavorite(name) {
+  const handle = await getFavoriteHandle(name);
+  if (!handle) {
+    alert('无法打开该目录，请重新选择。');
+    await removeFavorite(name);
+    await refreshFavorites();
+    return;
+  }
+  // Verify permission — this may trigger a user prompt
+  try {
+    const permission = await handle.queryPermission({ mode: 'readwrite' });
+    if (permission !== 'granted') {
+      await handle.requestPermission({ mode: 'readwrite' });
+    }
+  } catch { /* some browsers may not support this yet */ }
+
+  // Re-open the favorited directory
+  rootHandle = handle;
+  rootName = name;
+  handleMap.clear();
+  state.expandedDirs.clear();
+  state.currentFilePath = null;
+  state.currentDirPath = '';
+  state.viewMode = 'source';
+
+  $welcome.style.display = 'none';
+  $mainLayout.style.display = 'flex';
+  $contentHeader.innerHTML = '';
+  $contentBody.innerHTML = `<div class="empty-state">
+    <div class="icon">📂</div><div class="msg">选择一个文件查看内容</div>
+    <div class="hint">在左侧目录树中点击文件</div></div>`;
+
+  await loadDirectory('');
+  await refreshFavorites();
+}
+
+// ============ Resize Handle ============
+let isResizing = false;
+$resizeHandle.addEventListener('mousedown', (e) => {
+  isResizing = true;
+  $resizeHandle.classList.add('active');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  e.preventDefault();
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isResizing) return;
+  const newWidth = Math.max(180, Math.min(600, e.clientX));
+  $sidebar.style.width = newWidth + 'px';
+  document.documentElement.style.setProperty('--sidebar-width', newWidth + 'px');
+});
+
+document.addEventListener('mouseup', () => {
+  if (!isResizing) return;
+  isResizing = false;
+  $resizeHandle.classList.remove('active');
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+});
+
+// ============ Keyboard Shortcuts ============
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+    e.preventDefault();
+    selectDirectory();
+  }
+  // Toggle preview with Ctrl+P (only when viewing a previewable file)
+  if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+    if (state.currentFilePath && state.lastFileName && isPreviewable(state.lastFileName)) {
+      e.preventDefault();
+      state.viewMode = state.viewMode === 'source' ? 'preview' : 'source';
+      renderFileContent(state.lastFileName, state.lastFileSize, state.lastFileModified, state.lastFileContent, state.currentFilePath);
+    }
+  }
+});
+
+// ============ Init Favorites ============
+refreshFavorites();
+</script>
+</body>
+</html>
