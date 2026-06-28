@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Large Language Models are Zero-Shot Reasoners — 深度解读</title>
+
+<!-- KaTeX for LaTeX rendering -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+<style>
+/* ===== Apple Design System ===== */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f7;
+  --bg-tertiary: #fafafa;
+  --text-primary: #1d1d1f;
+  --text-secondary: #86868b;
+  --text-tertiary: #6e6e73;
+  --accent: #0071e3;
+  --accent-hover: #0077ed;
+  --accent-light: #e8f0fe;
+  --border: #d2d2d7;
+  --border-light: #e5e5ea;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.10);
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+  --max-width: 900px;
+  --nav-width: 260px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  line-height: 1.6;
+  font-size: 17px;
+}
+
+/* ===== Navigation ===== */
+nav {
+  position: fixed;
+  top: 0; left: 0;
+  width: var(--nav-width);
+  height: 100vh;
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-right: 1px solid var(--border-light);
+  padding: 32px 24px;
+  overflow-y: auto;
+  z-index: 100;
+}
+nav h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+nav a {
+  display: block;
+  font-size: 14px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+  padding: 6px 0;
+  transition: color 0.2s;
+  line-height: 1.5;
+}
+nav a:hover, nav a.active {
+  color: var(--accent);
+}
+nav a.sub { padding-left: 16px; font-size: 13px; }
+nav .divider {
+  height: 1px;
+  background: var(--border-light);
+  margin: 16px 0;
+}
+
+/* ===== Main Content ===== */
+main {
+  margin-left: var(--nav-width);
+  max-width: var(--max-width);
+  padding: 60px 48px 120px;
+}
+
+/* ===== Hero ===== */
+.hero {
+  margin-bottom: 80px;
+  padding-top: 40px;
+}
+.hero .venue {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  margin-bottom: 16px;
+}
+.hero h1 {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  margin-bottom: 24px;
+  color: var(--text-primary);
+}
+.hero .authors {
+  font-size: 18px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.hero .affiliations {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  margin-bottom: 40px;
+}
+.hero .paper-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 36px;
+}
+.hero .paper-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 8px 18px;
+  background: var(--accent-light);
+  border-radius: 20px;
+  transition: all 0.2s;
+}
+.hero .paper-links a:hover {
+  background: var(--accent);
+  color: white;
+}
+.hero .abstract-label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+.hero .abstract {
+  font-size: 19px;
+  color: var(--text-primary);
+  line-height: 1.65;
+  padding: 32px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  border-left: 4px solid var(--accent);
+}
+
+/* ===== Section Titles ===== */
+.section {
+  margin-bottom: 80px;
+}
+.section h2 {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: 32px;
+  color: var(--text-primary);
+}
+.section h3 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  margin: 40px 0 20px;
+  color: var(--text-primary);
+}
+.section h4 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 28px 0 12px;
+  color: var(--text-primary);
+}
+
+/* ===== Cards ===== */
+.card {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: 28px;
+  margin: 24px 0;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.card h4 {
+  margin-top: 0;
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+/* ===== Info Grid ===== */
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin: 24px 0;
+}
+.info-card {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  padding: 24px;
+  border: 1px solid var(--border-light);
+}
+.info-card .label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.info-card .value {
+  font-size: 17px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* ===== Tables ===== */
+.table-wrapper {
+  overflow-x: auto;
+  margin: 28px 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.5;
+}
+thead th {
+  background: var(--bg-secondary);
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  border-bottom: 2px solid var(--border);
+}
+tbody td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-primary);
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--bg-tertiary); }
+.best { color: var(--accent); font-weight: 700; }
+.highlight { background: var(--accent-light); }
+
+/* ===== Figures ===== */
+.figure {
+  margin: 32px 0;
+  text-align: center;
+}
+.figure .placeholder {
+  background: var(--bg-secondary);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 60px 24px;
+  color: var(--text-secondary);
+  font-size: 15px;
+  transition: background 0.2s;
+}
+.figure .placeholder:hover {
+  background: var(--accent-light);
+  border-color: var(--accent);
+}
+.figure .placeholder .icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+}
+.figure .placeholder .tag {
+  display: inline-block;
+  background: var(--accent);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.figure .caption {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 12px;
+  line-height: 1.5;
+}
+
+/* ===== Algorithm Flow ===== */
+.algo-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 24px 0;
+}
+.algo-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  padding: 20px 24px;
+  border: 1px solid var(--border-light);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.algo-step:hover {
+  transform: translateX(4px);
+  box-shadow: var(--shadow-sm);
+}
+.algo-step .num {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.algo-step .content { flex: 1; }
+.algo-step .content .title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  font-size: 16px;
+}
+.algo-step .content .desc {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+.algo-arrow {
+  text-align: center;
+  font-size: 20px;
+  color: var(--accent);
+  padding: 4px 0;
+  margin-left: 18px;
+}
+
+/* ===== Callouts ===== */
+.callout {
+  border-radius: var(--radius-sm);
+  padding: 20px 24px;
+  margin: 24px 0;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.callout.info {
+  background: #e8f4fd;
+  border-left: 4px solid var(--accent);
+  color: #1d3b5c;
+}
+.callout.warning {
+  background: #fff8e1;
+  border-left: 4px solid #ff9500;
+  color: #5c3d00;
+}
+.callout.success {
+  background: #e8f8ed;
+  border-left: 4px solid #34c759;
+  color: #1c3d24;
+}
+.callout.insight {
+  background: #f3e8ff;
+  border-left: 4px solid #af52de;
+  color: #2d1040;
+}
+
+/* ===== Review Section ===== */
+.review-card {
+  background: linear-gradient(135deg, #1d1d1f 0%, #2d2d2f 100%);
+  color: #f5f5f7;
+  border-radius: var(--radius-xl);
+  padding: 48px;
+  margin: 32px 0;
+}
+.review-card h3 {
+  color: #f5f5f7;
+  font-size: 28px;
+  margin-top: 0;
+}
+.review-card .score {
+  display: inline-block;
+  background: var(--accent);
+  color: white;
+  padding: 8px 20px;
+  border-radius: 24px;
+  font-weight: 700;
+  font-size: 20px;
+  margin-bottom: 24px;
+}
+.review-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin: 28px 0;
+}
+.review-item {
+  background: rgba(255,255,255,0.08);
+  border-radius: var(--radius-sm);
+  padding: 24px;
+  backdrop-filter: blur(10px);
+}
+.review-item h4 {
+  color: #f5f5f7;
+  font-size: 16px;
+  margin: 0 0 12px;
+}
+.review-item ul {
+  list-style: none;
+  padding: 0;
+}
+.review-item li {
+  font-size: 14px;
+  color: rgba(255,255,255,0.75);
+  padding: 4px 0;
+  line-height: 1.5;
+}
+.review-item li::before {
+  content: "— ";
+  color: var(--accent);
+}
+
+/* ===== Pipeline Diagram ===== */
+.pipeline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 32px 0;
+  flex-wrap: wrap;
+}
+.pipeline .box {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  text-align: center;
+  min-width: 160px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: transform 0.2s;
+}
+.pipeline .box:hover { transform: scale(1.05); }
+.pipeline .box.primary {
+  background: var(--accent);
+  color: white;
+  border: none;
+}
+.pipeline .arrow {
+  font-size: 24px;
+  color: var(--text-secondary);
+}
+
+/* ===== Comparison Bar ===== */
+.bar-chart {
+  margin: 24px 0;
+}
+.bar-row {
+  display: flex;
+  align-items: center;
+  margin: 12px 0;
+  gap: 12px;
+}
+.bar-label {
+  width: 160px;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: right;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+.bar-track {
+  flex: 1;
+  height: 28px;
+  background: var(--bg-secondary);
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 14px;
+  transition: width 1s ease;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+}
+.bar-fill.accent { background: var(--accent); }
+.bar-fill.gray { background: #86868b; }
+.bar-fill.green { background: #34c759; }
+.bar-fill.orange { background: #ff9500; }
+.bar-fill.purple { background: #af52de; }
+
+/* ===== Template Tags ===== */
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.tag {
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.tag.good { background: #e8f8ed; color: #1c8a3e; }
+.tag.bad { background: #ffe8e8; color: #c42b2b; }
+.tag.neutral { background: var(--bg-secondary); color: var(--text-tertiary); }
+.tag.accent { background: var(--accent-light); color: var(--accent); }
+
+/* ===== LaTeX Fixes ===== */
+.katex { font-size: 1.05em; }
+.katex-display { overflow-x: auto; overflow-y: hidden; }
+.katex-display > .katex {
+  display: inline-block;
+  white-space: nowrap;
+  max-width: 100%;
+}
+p .katex { white-space: nowrap; display: inline; }
+
+/* ===== Responsive ===== */
+@media (max-width: 1100px) {
+  nav { display: none; }
+  main { margin-left: 0; padding: 40px 24px 80px; }
+  .hero h1 { font-size: 36px; }
+  .section h2 { font-size: 28px; }
+  .info-grid { grid-template-columns: 1fr; }
+  .review-grid { grid-template-columns: 1fr; }
+  .pipeline { flex-direction: column; }
+  .pipeline .arrow { transform: rotate(90deg); }
+}
+
+/* ===== On This Page (mobile) ===== */
+.on-this-page-toggle {
+  display: none;
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 24px;
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+@media (max-width: 1100px) {
+  .on-this-page-toggle { display: flex; }
+}
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav id="nav">
+  <h3>📄 目录导航</h3>
+  <a href="#hero">摘要</a>
+  <a href="#motivation">研究动机</a>
+  <a href="#method">方法与建模</a>
+  <a href="#method" class="sub">Two-Stage Prompting</a>
+  <a href="#method" class="sub">算法流程</a>
+  <a href="#method" class="sub">Prompt 模板设计</a>
+  <a href="#experiments">实验设计</a>
+  <a href="#experiments" class="sub">数据集</a>
+  <a href="#experiments" class="sub">模型与超参数</a>
+  <a href="#experiments" class="sub">Baselines</a>
+  <a href="#results">实验结果</a>
+  <a href="#results" class="sub">主实验结果</a>
+  <a href="#results" class="sub">模型规模研究</a>
+  <a href="#analysis">深入分析</a>
+  <a href="#analysis" class="sub">错误分析</a>
+  <a href="#analysis" class="sub">模板鲁棒性</a>
+  <a href="#discussion">讨论与相关工作</a>
+  <a href="#review">犀利评论</a>
+  <a href="#onemore">One More Thing</a>
+</nav>
+
+<button class="on-this-page-toggle" onclick="document.getElementById('nav').style.display=document.getElementById('nav').style.display==='block'?'none':'block'" aria-label="目录">☰</button>
+
+<!-- Main Content -->
+<main>
+
+<!-- ===== Hero ===== -->
+<section class="hero" id="hero">
+  <div class="venue">NeurIPS 2022</div>
+  <h1>Large Language Models are<br>Zero-Shot Reasoners</h1>
+  <div class="authors">
+    Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka Matsuo, Yusuke Iwasawa
+  </div>
+  <div class="affiliations">
+    东京大学 &nbsp;·&nbsp; Google Research, Brain Team
+  </div>
+  <div class="paper-links">
+    <a href="https://ar5iv.labs.arxiv.org/html/2205.11916" target="_blank" rel="noopener">📄 阅读全文 (ar5iv HTML)</a>
+    <a href="https://arxiv.org/abs/2205.11916" target="_blank" rel="noopener">📋 arXiv 2205.11916</a>
+    <a href="https://github.com/kojima-takeshi188/zero_shot_cot" target="_blank" rel="noopener">💻 GitHub 代码</a>
+  </div>
+  <div class="abstract-label">Abstract</div>
+  <div class="abstract">
+    预训练大语言模型（LLM）被广泛认为具有出色的零样本（zero-shot）能力，但在多步推理（multi-step reasoning）这类"系统-2"任务上表现极差。<strong>本文发现：LLM 实际上是一个出色的零样本推理者</strong>——只需要在回答前追加一句极其简单的提示语 <strong>"Let's think step by step"</strong>，LLM 就能自行生成连贯的推理链条并得出正确答案。这种被称为 <strong>Zero-shot-CoT</strong> 的方法无需任何人工设计的少样本示例，用一个固定的 prompt 模板即跨越算术推理、常识推理、符号推理等多个领域。在 MultiArith 上准确率从 <span style="color:var(--accent);font-weight:700;">17.7% → 78.7%</span>，GSM8K 上从 <span style="color:var(--accent);font-weight:700;">10.4% → 40.7%</span>（text-davinci-002），在 PaLM 540B 上同样大幅提升。这项工作揭示了 LLM 中<strong>被严重低估和未被充分挖掘的零样本高层认知能力</strong>。
+  </div>
+</section>
+
+<!-- ===== 1. 研究动机 ===== -->
+<section class="section" id="motivation">
+  <h2>🔍 研究动机</h2>
+
+  <h3>核心问题：LLM 的"系统-1"与"系统-2"鸿沟</h3>
+  <p>
+    随着模型规模的持续增长（从 GPT-2 到 GPT-3 再到 PaLM 540B），LLM 在直觉性、单步式任务（即 Daniel Kahneman 所说的<strong>"系统-1"</strong>任务——如情感分析、文本分类、简单问答）上展现了惊人的零样本能力。然而，在需要<strong>缓慢、深思熟虑、多步推理</strong>的"系统-2"任务（如多位数算术、符号推理、逻辑推理）上，即便模型达到了 100B+ 参数量，准确率仍然呈现<strong>平坦的缩放曲线</strong>（flat scaling curves）——靠堆参数无法解决问题。
+  </p>
+
+  <div class="callout info">
+    <strong>关键矛盾：</strong>Wei et al. (2022) 提出的 Chain-of-Thought (CoT) prompting 通过在 prompt 中提供<strong>逐步推理的少样本示例</strong>（Few-shot-CoT），在数学推理任务上取得了巨大突破（如 GSM8K 上 PaLM 540B 从 17.9% → 58.1%）。但这种方法<strong>需要为每个任务手工设计推理示例</strong>，工程成本高且泛化性有限。更关键的是，Wei et al. (2022) <strong>没有报告零样本基线</strong>，留下了核心问题：<strong>LLM 能否在没有示例的情况下进行链式推理？</strong>
+  </div>
+
+  <h3>本文的核心洞见</h3>
+  <p>
+    Kojima et al. 提出了一个极其简洁的假设：<strong>LLM 的零样本推理能力是存在的，只是需要被"触发"</strong>。就像心理学中的 priming 效应，一句简单的引导语 $\texttt{"Let's think step by step"}$ 就能激活模型在预训练中习得的推理模式，让模型"自行生成"思维链条，然后基于自己生成的推理<strong>再</strong>提取最终答案。这个想法本质上是一个<strong>两阶段提示框架</strong>（two-stage prompting），其优雅之处在于：
+  </p>
+  <ul style="margin: 16px 0 16px 32px; line-height: 2;">
+    <li><strong>任务无关性（Task-agnostic）：</strong>同一个 prompt 适用于算术、常识、符号、逻辑推理等截然不同的领域</li>
+    <li><strong>零示例（Zero exemplars）：</strong>完全不需要任何人工标注的推理示例，消除了一切与任务相关的工程努力</li>
+    <li><strong>模型无关性（Model-agnostic）：</strong>在 InstructGPT-3、原始 GPT-3、PaLM 等多种模型家族上均有效</li>
+  </ul>
+
+  <div class="card">
+    <h4>📌 研究 Significance</h4>
+    <p style="margin-bottom:12px;">本文揭示了 LLM 中此前<strong>被严重低估的"广泛认知能力"（broad cognitive capabilities）</strong>——区别于"窄任务技能"（narrow task-specific skills）。它证明了：</p>
+    <ol style="margin-left:20px; line-height:1.8;">
+      <li>多步推理<strong>不需要</strong>通过 few-shot 示例来"教"模型</li>
+      <li>推理能力是预训练过程中<strong>涌现</strong>的，只需合适的方式"解锁"</li>
+      <li>这种方法确立了<strong>多步推理任务的最简洁且最强零样本基线</strong></li>
+    </ol>
+  </div>
+
+  <h3>问题形式化</h3>
+  <p>
+    给定输入问题 $x$，标准 zero-shot prompting 直接预测答案 $\hat{y} = \arg\max_{y} P(y \mid \text{prompt}(x))$。Zero-shot-CoT 将这一过程<strong>解耦为两步</strong>：
+  </p>
+  <ul style="margin:16px 0 16px 32px; line-height:2;">
+    <li><strong>第一步（推理生成）：</strong> $z \sim P(z \mid \text{prompt}_{\text{reason}}(x))$</li>
+    <li><strong>第二步（答案提取）：</strong> $\hat{y} = \arg\max_{y} P(y \mid \text{prompt}_{\text{answer}}(x, z))$</li>
+  </ul>
+  <p>
+    其中 $z$ 是模型自己生成的推理链（chain of thought），$\text{prompt}_{\text{reason}}$ 的核心就是那句神奇的话 $\texttt{"Let's think step by step."}$。
+  </p>
+</section>
+
+<!-- ===== 2. 方法 ===== -->
+<section class="section" id="method">
+  <h2>🧠 方法：Zero-shot Chain of Thought</h2>
+
+  <h3>Two-Stage Prompting 框架</h3>
+  <p>
+    与标准 prompting 直接从输入到输出不同，Zero-shot-CoT 将推理和答案生成<strong>显式分离</strong>为两个阶段。这种设计背后的直觉是：直接要求模型给出答案，模型往往凭"直觉"（system-1）输出错误结果；但先让模型"想清楚"再回答，就能激活其更深层的推理能力。
+  </p>
+
+  <div class="pipeline" style="margin: 36px 0;">
+    <div class="box">
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">输入</div>
+      <strong>Question x</strong><br>
+      <span style="font-size:12px;color:var(--text-tertiary);">e.g. "Roger has 5 tennis balls..."</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box primary">
+      <div style="font-size:11px;opacity:0.8;margin-bottom:4px;">Stage 1</div>
+      <strong>Prompt<sub>reason</sub></strong><br>
+      <span style="font-size:12px;">Q: [x]. A: Let's think<br>step by step.</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box">
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">推理链 z</div>
+      <strong>LLM generates</strong><br>
+      <span style="font-size:12px;color:var(--text-tertiary);">"Roger started with 5 balls..."</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box primary">
+      <div style="font-size:11px;opacity:0.8;margin-bottom:4px;">Stage 2</div>
+      <strong>Prompt<sub>answer</sub></strong><br>
+      <span style="font-size:12px;">[x'] [z] Therefore,<br>the answer is</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="box">
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px;">最终答案</div>
+      <strong>Answer y</strong><br>
+      <span style="font-size:12px;color:var(--text-tertiary);">经 answer cleansing</span>
+    </div>
+  </div>
+
+  <h4>第一阶段的 Prompt 模板</h4>
+  <p>
+    使用模板 $\texttt{"Q: [X]. A: [T]"}$，其中 $[X]$ 是输入问题，$[T]$ 是触发句（trigger sentence）。默认触发句为：
+  </p>
+  <div class="callout info">
+    <strong>默认 Trigger：</strong><code style="font-size:17px;background:rgba(0,0,0,0.05);padding:4px 12px;border-radius:6px;">Let's think step by step.</code>
+  </div>
+  <p>
+    这个设计有两个关键细节：(1) 格式与 InstructGPT 的训练数据分布一致；(2) $\texttt{"A:"}$ 作为模型开始推理的"锚点"。对于非 InstructGPT 模型，使用自定义停止序列 $\texttt{"Q:"}$ 来防止模型生成超出推理范围的内容。
+  </p>
+
+  <h4>第二阶段的 Prompt 模板</h4>
+  <p>
+    将第一阶段生成的推理链 $z$ 与原始问题拼接，追加一个<strong>答案提取触发句</strong>：
+  </p>
+  <div class="callout info">
+    $\texttt{"[X'] [Z] [A]"}$<br>
+    其中 $[X']$ = 第一阶段 prompt，$[Z]$ = 模型生成的推理，$[A]$ = 答案提取触发句
+  </div>
+  <p>根据任务答案格式不同，$[A]$ 有不同变体：</p>
+
+  <table style="margin:20px 0; width:100%;">
+    <thead><tr><th>答案格式</th><th>第二阶段 Prompt 的 $[A]$</th><th>适用任务</th></tr></thead>
+    <tbody>
+      <tr><td>数值（Number）</td><td><code>Therefore, the answer (arabic numerals) is</code></td><td>SingleEq, AddSub, MultiArith, GSM8K, SVAMP</td></tr>
+      <tr><td>多选（Multiple Choice）</td><td><code>Therefore, among A through E, the answer is</code></td><td>AQUA-RAT, CommonsenseQA, Date Understanding</td></tr>
+      <tr><td>是/否（Yes/No）</td><td><code>Therefore, the answer (Yes or No) is</code></td><td>StrategyQA, Coin Flip</td></tr>
+      <tr><td>自由格式（Free）</td><td><code>Therefore, the answer is</code></td><td>Last Letter Concatenation</td></tr>
+      <tr><td>多选 3 选项</td><td><code>Therefore, among A through C, the answer is</code></td><td>Tracking Shuffled Objects</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Answer Cleansing（答案清洗）</h3>
+  <p>第二阶段模型输出的文本并非格式化的答案，需要清洗提取：</p>
+
+  <div class="info-grid">
+    <div class="info-card">
+      <div class="label">数值格式</div>
+      <div class="value" style="font-size:14px;">正则提取 <code>-?\d+\.?\d*</code>，去逗号，取首个匹配。例如 <code>"$1,000"</code> → <code>"1000"</code></div>
+    </div>
+    <div class="info-card">
+      <div class="label">多选格式</div>
+      <div class="value" style="font-size:14px;">正则提取 <code>A|B|C|D|E</code>，取首个大写字母。例如 <code>"The answer is B."</code> → <code>"B"</code></div>
+    </div>
+    <div class="info-card">
+      <div class="label">是/否格式</div>
+      <div class="value" style="font-size:14px;">小写化→去标点→分词→搜索 "yes"/"no"。例如 <code>"Yes, it is."</code> → <code>"yes"</code></div>
+    </div>
+    <div class="info-card">
+      <div class="label">自由格式</div>
+      <div class="value" style="font-size:14px;">去除引号、撇号、换行、句号、空格。例如 <code>"M, A, R, Y."</code> → <code>"MARY"</code></div>
+    </div>
+  </div>
+
+  <h3>与 Few-shot-CoT 的对比</h3>
+  <p>为了直观理解差异，以下是两种方法的 prompt 结构对比（以数学题为例）：</p>
+
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 24px 0;">
+    <div class="card" style="margin:0;">
+      <h4 style="color: var(--accent);">Few-shot-CoT</h4>
+      <div style="background:var(--bg-tertiary);border-radius:8px;padding:16px;font-size:13px;line-height:1.7;font-family:'SF Mono', monospace;">
+        <strong>Q:</strong> Roger has 5 tennis balls. He buys 2 more cans of tennis balls. Each can has 3 tennis balls. How many tennis balls does he have?<br>
+        <strong>A:</strong> Roger started with 5 balls. 2 cans of 3 tennis balls each is 6 tennis balls. 5 + 6 = 11. The answer is 11.<br><br>
+        <strong>Q:</strong> [Target question]<br>
+        <strong>A:</strong>
+      </div>
+      <p style="font-size:12px;color:var(--text-secondary);margin-top:8px;">需要 8 个人工标注的推理示例</p>
+    </div>
+    <div class="card" style="margin:0;">
+      <h4 style="color: var(--accent);">Zero-shot-CoT (本文)</h4>
+      <div style="background:var(--bg-tertiary);border-radius:8px;padding:16px;font-size:13px;line-height:1.7;font-family:'SF Mono', monospace;">
+        <strong>Stage 1:</strong><br>
+        <strong>Q:</strong> [Target question]<br>
+        <strong>A: Let's think step by step.</strong><br>
+        [model generates reasoning]<br><br>
+        <strong>Stage 2:</strong><br>
+        [full stage 1 output]<br>
+        <strong>Therefore, the answer (arabic numerals) is</strong>
+      </div>
+      <p style="font-size:12px;color:var(--text-secondary);margin-top:8px;">零人工示例，一行 trigger 搞定</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 3. 实验设计 ===== -->
+<section class="section" id="experiments">
+  <h2>🔬 实验设计与方法</h2>
+
+  <h3>数据集总览</h3>
+  <p>实验涵盖 <strong>12 个数据集</strong>，跨越 <strong>4 大类推理任务</strong>。这种多任务覆盖确保了结论的泛化性：</p>
+
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr><th>类别</th><th>数据集</th><th>样本数</th><th>答案格式</th><th>平均词数</th><th>特点</th></tr>
+      </thead>
+      <tbody>
+        <tr><td rowspan="6"><strong>算术推理<br>Arithmetic</strong></td><td>SingleEq</td><td>508</td><td>N</td><td>27.4</td><td>单步方程，简单</td></tr>
+        <tr><td>AddSub</td><td>395</td><td>N</td><td>31.5</td><td>加减法，较简单</td></tr>
+        <tr><td>MultiArith</td><td>600</td><td>N</td><td>31.8</td><td>多步算术，中等难度</td></tr>
+        <tr><td>AQUA-RAT</td><td>254</td><td>M</td><td>51.7</td><td>代数应用题+多选</td></tr>
+        <tr><td>GSM8K</td><td>1,319</td><td>N</td><td>59.9</td><td>小学数学应用题（需2-8步），高难度</td></tr>
+        <tr><td>SVAMP</td><td>1,000</td><td>N</td><td>33.6</td><td>结构化变体，测试鲁棒性</td></tr>
+        <tr><td rowspan="2"><strong>常识推理<br>Commonsense</strong></td><td>CommonsenseQA</td><td>1,221</td><td>M</td><td>23.3</td><td>需要外部常识知识</td></tr>
+        <tr><td>StrategyQA</td><td>2,290</td><td>Y</td><td>10.3</td><td>隐式多跳推理（是/否）</td></tr>
+        <tr><td rowspan="2"><strong>符号推理<br>Symbolic</strong></td><td>Last Letter</td><td>500</td><td>F</td><td>20.4</td><td>拼接4个名字的末字母</td></tr>
+        <tr><td>Coin Flip</td><td>500</td><td>Y</td><td>37.0</td><td>跟踪4次硬币翻转</td></tr>
+        <tr><td rowspan="2"><strong>逻辑推理<br>BIG-bench</strong></td><td>Date Understanding</td><td>369</td><td>M</td><td>25.0</td><td>日期推理，6选1</td></tr>
+        <tr><td>Tracking Shuffled Objects</td><td>750</td><td>M</td><td>43.6</td><td>跟踪3个物体位置变化，3选1</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout info">
+    <strong>为什么选这些数据集？</strong> 论文有意覆盖了从"不需要多步推理"（SingleEq、AddSub）到"高度依赖多步推理"（GSM8K）的完整谱系，以验证 Zero-shot-CoT 的收益<strong>确实来源于激活了多步推理能力</strong>而非其他混杂因素。Last Letter 和 Coin Flip 是 Wei et al. (2022) 中显示 LLM 有平坦缩放曲线的标志性难题。
+  </div>
+
+  <h3>模型矩阵（17 个模型）</h3>
+
+  <div class="table-wrapper">
+    <table>
+      <thead><tr><th>模型家族</th><th>模型</th><th>参数量</th><th>API/库</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="5"><strong>InstructGPT-3</strong></td><td>text-ada-001</td><td>~0.35B*</td><td>OpenAI API</td></tr>
+        <tr><td>text-babbage-001</td><td>~1.3B*</td><td>OpenAI API</td></tr>
+        <tr><td>text-curie-001</td><td>~6.7B*</td><td>OpenAI API</td></tr>
+        <tr><td>text-davinci-001</td><td>~175B*</td><td>OpenAI API</td></tr>
+        <tr><td><strong>text-davinci-002</strong></td><td>~175B*</td><td>OpenAI API</td></tr>
+        <tr><td rowspan="4"><strong>原始 GPT-3</strong></td><td>ada</td><td>0.35B</td><td>OpenAI API</td></tr>
+        <tr><td>babbage</td><td>1.3B</td><td>OpenAI API</td></tr>
+        <tr><td>curie</td><td>6.7B</td><td>OpenAI API</td></tr>
+        <tr><td>davinci</td><td>175B</td><td>OpenAI API</td></tr>
+        <tr><td rowspan="3"><strong>PaLM</strong></td><td>PaLM 8B</td><td>8B</td><td>Google internal</td></tr>
+        <tr><td>PaLM 62B</td><td>62B</td><td>Google internal</td></tr>
+        <tr><td><strong>PaLM 540B</strong></td><td>540B</td><td>Google internal</td></tr>
+        <tr><td rowspan="5"><strong>其他开源模型</strong></td><td>GPT-2</td><td>1.5B</td><td>HuggingFace Transformers</td></tr>
+        <tr><td>GPT-Neo</td><td>2.7B</td><td>HuggingFace Transformers</td></tr>
+        <tr><td>GPT-J</td><td>6B</td><td>HuggingFace Transformers</td></tr>
+        <tr><td>T0</td><td>11B</td><td>HuggingFace Transformers</td></tr>
+        <tr><td>OPT</td><td>13B</td><td>HuggingFace Transformers</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:12px;color:var(--text-secondary);">* 标注为估计值，InstructGPT 系列参数量未官方公开，数字来自 EleutherAI 博客</p>
+
+  <h3>超参数设置</h3>
+  <div class="info-grid">
+    <div class="info-card">
+      <div class="label">解码策略</div>
+      <div class="value">Greedy decoding：OpenAI API 设 temperature = 0；PaLM 设 TopK = 1</div>
+    </div>
+    <div class="info-card">
+      <div class="label">最大生成长度</div>
+      <div class="value">max_tokens = 128（PaLM 为 256，以弥补 API 差异）</div>
+    </div>
+    <div class="info-card">
+      <div class="label">停止序列</div>
+      <div class="value">非 InstructGPT 模型设置 stop = <code>"Q:"</code>，防止模型"幻想"出新问题</div>
+    </div>
+    <div class="info-card">
+      <div class="label">计算资源</div>
+      <div class="value">Cloud V100（GPT-3 API），A100×8（T0, OPT），A100×1（GPT-J, GPT-Neo, GPT-2）</div>
+    </div>
+  </div>
+
+  <h3>Baselines 设置</h3>
+  <div class="table-wrapper">
+    <table>
+      <thead><tr><th>Baseline</th><th>描述</th><th>Prompt 结构</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Standard Zero-shot</strong></td><td>标准零样本提示，直接要求答案</td><td><code>Q: [X]. A: The answer is</code></td></tr>
+        <tr><td><strong>Few-shot (2-ex)</strong></td><td>2个标准示例（无推理步骤）</td><td>问题+直接答案 ×2 → 目标问题</td></tr>
+        <tr><td><strong>Few-shot (8-ex)</strong></td><td>8个标准示例</td><td>问题+直接答案 ×8 → 目标问题</td></tr>
+        <tr><td><strong>Zero-shot-CoT</strong></td><td><strong>本文方法</strong></td><td>两阶段：trigger → 推理 → 答案</td></tr>
+        <tr><td><strong>Few-shot-CoT (2-ex)</strong></td><td>2个含推理步骤的示例</td><td>问题+推理+答案 ×2 → 目标问题</td></tr>
+        <tr><td><strong>Few-shot-CoT (8-ex)</strong></td><td>8个含推理步骤的示例（Wei et al.）</td><td>问题+推理+答案 ×8 → 目标问题</td></tr>
+        <tr><td><strong>Zero+Few-shot-CoT</strong></td><td>Zero-shot-CoT 推理 + 8个 Few-shot-CoT 示例（第二阶段）</td><td>结合两种方法优势</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warning">
+    <strong>⚠️ 重要细节：</strong>所有 zero-shot 实验均使用 <strong>greedy decoding</strong>（确定性解码）。这意味着对于 zero-shot 方法，给定相同输入，输出是<strong>确定的</strong>——不存在随机性。这确保了比较的公平性。Few-shot 实验也统一使用 greedy decoding。
+  </div>
+
+  <h3>Prompt 模板的两种配置</h3>
+  <p>论文仔细区分了两种 prompt 配置，分别对应 Table 1 中的"左列"和"右列"数值：</p>
+  <ul style="margin:16px 0 16px 32px; line-height:2;">
+    <li><strong>左列（Task-specific）：</strong>使用如表所述的任务特定答案格式 prompt（如 <code>"Therefore, the answer (arabic numerals) is"</code>）</li>
+    <li><strong>右列（Generic）：</strong>所有任务统一使用通用的 <code>"Therefore, the answer is"</code></li>
+  </ul>
+  <p>两种配置的差异反映了 prompt 工程对性能的细微影响——实际上通用格式在很多任务上表现不差，这进一步支持了"模型捕捉的是任务无关的推理能力"这一核心论点。</p>
+</section>
+
+<!-- ===== 4. 实验结果 ===== -->
+<section class="section" id="results">
+  <h2>📊 实验结果与核心结论</h2>
+
+  <h3>Table 1: Zero-shot-CoT vs Zero-shot（逐任务）</h3>
+  <p>这是论文<strong>最核心的实验结果表</strong>，展示了 Zero-shot-CoT 在每个任务上相对于标准 Zero-shot 的增益。左值/右值分别对应任务特定 prompt 和通用 prompt：</p>
+
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr><th>任务</th><th>Zero-shot</th><th>Zero-shot-CoT</th><th>Δ 提升</th><th>推理类型</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>SingleEq</td><td>74.6 / 78.7</td><td>78.0 / 78.7</td><td style="color:#34c759;">+3.4 / +0.0</td><td>单步（不需要推理）</td></tr>
+        <tr><td>AddSub</td><td>72.2 / 77.0</td><td>69.6 / 74.7</td><td style="color:#ff9500;">–2.6 / –2.3</td><td>单步（不需要推理）</td></tr>
+        <tr class="highlight"><td><strong>MultiArith</strong></td><td>17.7 / 22.7</td><td><strong class="best">78.7</strong> / 79.3</td><td style="color:var(--accent);font-weight:700;">+61.0 / +56.6</td><td><strong>多步推理</strong></td></tr>
+        <tr class="highlight"><td><strong>GSM8K</strong></td><td>10.4 / 12.5</td><td><strong class="best">40.7</strong> / 40.5</td><td style="color:var(--accent);font-weight:700;">+30.3 / +28.0</td><td><strong>多步推理</strong></td></tr>
+        <tr class="highlight"><td><strong>AQUA-RAT</strong></td><td>22.4 / 22.4</td><td>33.5 / 31.9</td><td style="color:var(--accent);">+11.1 / +9.5</td><td><strong>多步推理+多选</strong></td></tr>
+        <tr class="highlight"><td><strong>SVAMP</strong></td><td>58.8 / 58.7</td><td>62.1 / 63.7</td><td style="color:var(--accent);">+3.3 / +5.0</td><td><strong>多步推理</strong></td></tr>
+        <tr><td>CommonsenseQA</td><td>68.8 / 72.6</td><td>64.6 / 64.0</td><td style="color:#ff9500;">–4.2 / –8.6</td><td>常识推理</td></tr>
+        <tr class="highlight"><td><strong>StrategyQA</strong></td><td>12.7 / 54.3</td><td>54.8 / 52.3</td><td style="color:var(--accent);">+42.1 / –2.0</td><td><strong>隐式多跳推理</strong></td></tr>
+        <tr class="highlight"><td><strong>Date Understanding</strong></td><td>49.3 / 33.6</td><td>67.5 / 61.8</td><td style="color:var(--accent);">+18.2 / +28.2</td><td><strong>逻辑推理</strong></td></tr>
+        <tr class="highlight"><td><strong>Tracking Shuffled</strong></td><td>31.3 / 29.7</td><td>52.4 / 52.9</td><td style="color:var(--accent);">+21.1 / +23.2</td><td><strong>逻辑推理</strong></td></tr>
+        <tr class="highlight"><td><strong>Last Letter (4)</strong></td><td>0.2 / —</td><td>57.6 / —</td><td style="color:var(--accent);font-weight:700;">+57.4 / —</td><td><strong>符号推理</strong></td></tr>
+        <tr class="highlight"><td><strong>Coin Flip (4)</strong></td><td>12.8 / 53.8</td><td><strong class="best">91.4</strong> / 87.8</td><td style="color:var(--accent);font-weight:700;">+78.6 / +34.0</td><td><strong>符号推理</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>核心发现 1：收益只出现在需要多步推理的任务上</h4>
+  <p>
+    SingleEq 和 AddSub 作为<strong>单步任务</strong>，Zero-shot-CoT 几乎没有增益甚至略有下降。这强烈暗示：<strong>收益并非来自 prompt 格式的某种表面改进，而确实来自激活了多步推理机制</strong>。如果仅仅是 prompt 格式的改进，单步任务也应该受益，但数据不支持这一点。
+  </p>
+
+  <h4>核心发现 2：符号推理的惊人突破</h4>
+  <p>
+    Coin Flip（跟踪4次硬币翻转状态）上，Zero-shot-CoT 将准确率从 12.8% <strong>拉升到 91.4%</strong>，提升接近 80 个百分点。Last Letter（取4个名字末尾字母连接）从 0.2% 提升到 57.6%。这两个任务在 Wei et al. (2022) 中被证明即使在 100B+ 模型上也呈现<strong>平坦的缩放曲线</strong>——但 Zero-shot-CoT 竟然解锁了这些能力，说明问题不在于模型没有学会推理，而在于<strong>没有合适的方式激发它</strong>。
+  </p>
+
+  <h4>核心发现 3：常识推理确实不获益（甚至有害）</h4>
+  <p>
+    CommonsenseQA 上准确率从 68.8% <strong>下降</strong>到 64.6%。这与 Few-shot-CoT 的发现一致（Wei et al. 2022 中也未在常识推理上观察到改善）。论文推测：常识推理中，模型生成的推理步骤可能<strong>引入噪音或误导</strong>。这一点我们将在后面的错误分析中深入讨论。
+  </p>
+
+  <div class="figure">
+    <div class="placeholder">
+      <div class="icon">📊</div>
+      <div class="tag">Figure 1</div>
+      <div style="font-weight:600;margin-bottom:4px;">四种 Prompting 方法对比示意图</div>
+      <div style="font-size:13px;">(a) 标准 Few-shot &nbsp; (b) Few-shot-CoT &nbsp; (c) 标准 Zero-shot &nbsp; (d) Zero-shot-CoT<br>蓝色文字标注了多步推理过程如何导向正确答案</div>
+    </div>
+    <div class="caption"><strong>Figure 1:</strong> 四种 prompting 策略的对比。注意在 (c) 标准 Zero-shot 下模型直接给出错误答案（蓝色高亮），而 (d) Zero-shot-CoT 通过逐步推理得到正确答案。图片来自原论文。</div>
+  </div>
+
+  <h3>Table 2: 与所有 Baseline 的全面对比</h3>
+  <p>重点展示 MultiArith 和 GSM8K 两个<strong>旗舰级多步推理任务</strong>上的全方法对比：</p>
+
+  <div class="table-wrapper">
+    <table>
+      <thead><tr><th>方法</th><th>MultiArith</th><th>GSM8K</th><th>人工成本</th></tr></thead>
+      <tbody>
+        <tr><td>Zero-shot (直接回答)</td><td>17.7</td><td>10.4</td><td>零</td></tr>
+        <tr><td>Few-shot (2 examples)</td><td>33.7</td><td>15.6</td><td>2个例子（无推理）</td></tr>
+        <tr><td>Few-shot (8 examples)</td><td>33.8</td><td>15.6</td><td>8个例子（无推理）</td></tr>
+        <tr class="highlight"><td><strong>Zero-shot-CoT</strong></td><td><strong class="best">78.7</strong></td><td><strong>40.7</strong></td><td><strong>零</strong></td></tr>
+        <tr><td>Few-shot-CoT (2 examples)</td><td>84.8</td><td>41.3</td><td>2个推理示例</td></tr>
+        <tr><td>Few-shot-CoT (8 examples)</td><td>93.0</td><td>48.7</td><td>8个推理示例</td></tr>
+        <tr><td>Zero+Few-shot-CoT (8 examples)</td><td>92.8</td><td>51.5</td><td>8个推理示例+Zero-shot-CoT</td></tr>
+        <tr><td colspan="4" style="background:var(--bg-secondary);font-weight:600;">PaLM 540B 上的结果</td></tr>
+        <tr><td>PaLM: Zero-shot</td><td>25.5</td><td>12.5</td><td>零</td></tr>
+        <tr class="highlight"><td><strong>PaLM: Zero-shot-CoT</strong></td><td><strong class="best">66.1</strong></td><td><strong>43.0</strong></td><td><strong>零</strong></td></tr>
+        <tr><td>PaLM: Zero-shot-CoT + self-consistency</td><td>89.0</td><td>70.1</td><td>零（但需要采样多条）</td></tr>
+        <tr><td>PaLM: Few-shot</td><td>—</td><td>17.9</td><td>8个例子</td></tr>
+        <tr><td>PaLM: Few-shot-CoT</td><td>—</td><td>56.9</td><td>8个推理示例</td></tr>
+        <tr><td>PaLM: Few-shot-CoT + self-consistency</td><td>—</td><td>74.4</td><td>8个推理示例+采样</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>核心发现 4：Zero-shot-CoT 碾压标准 Few-shot</h4>
+  <p>
+    最令人震惊的结果：<strong>零样本+一行 trigger，竟然大幅超越 8 个标准示例的 few-shot</strong>。在 MultiArith 上，Zero-shot-CoT (78.7%) vs Few-shot-8ex (33.8%)，差距达 <strong>44.9 个百分点</strong>。这颠覆了"示例越多越好"的直觉——示例的质量（是否包含推理步骤）远比数量重要。
+  </p>
+
+  <h4>核心发现 5：与 Few-shot-CoT 的差距可被 self-consistency 弥合</h4>
+  <p>
+    Zero-shot-CoT 单独使用时，与 Few-shot-CoT (8-ex) 在 MultiArith 上差 14.3 个百分点（78.7% vs 93.0%）。但加入 self-consistency（采样多条推理路径，取多数答案）后，差距大幅缩小：MultiArith 上 89.0% vs Few-shot-CoT+SC 的效果基本持平；GSM8K 上 70.1% vs 74.4%。值得注意的是，<strong>Zero-shot-CoT + self-consistency 仍然不需要任何人工示例</strong>。
+  </p>
+
+  <h3>Figure 3: 模型规模研究</h3>
+  <p>论文在三个模型家族上系统性地研究了 Zero-shot-CoT 的效果如何随模型规模变化：</p>
+
+  <div class="figure">
+    <div class="placeholder">
+      <div class="icon">📈</div>
+      <div class="tag">Figure 3</div>
+      <div style="font-weight:600;margin-bottom:8px;">模型规模 vs Zero-shot-CoT 收益</div>
+      <div style="font-size:13px;text-align:left;max-width:500px;margin:0 auto;line-height:1.8;">
+        <strong>(a) 原始 GPT-3 @ MultiArith:</strong> Zero-shot 平坦于 ~15%，Zero-shot-CoT 从 ada 的 ~20% 攀升至 davinci 的 ~60%<br><br>
+        <strong>(b) InstructGPT-3 @ MultiArith:</strong> Zero-shot 平坦于 ~20%，Zero-shot-CoT 从 text-ada-001 的 ~20% 攀升至 text-davinci-002 的 ~78%<br><br>
+        <strong>(c) PaLM @ GSM8K:</strong> Zero-shot 平坦于 ~10-15%，Zero-shot-CoT 从 8B 的 ~10% 攀升至 540B 的 ~43%
+      </div>
+    </div>
+    <div class="caption"><strong>Figure 3:</strong> 三个模型家族的缩放曲线。关键发现：Zero-shot-CoT 的效果<strong>只在足够大的模型上涌现</strong>——小型模型（&lt;~10B）几乎不获益。这进一步支持了"推理能力作为涌现现象"的论断。</div>
+  </div>
+
+  <h4>核心发现 6：CoT 推理是涌现能力</h4>
+  <p>
+    Figure 3 揭示了清晰的<strong>涌现模式</strong>：在 ~1B–10B 范围内，Zero-shot-CoT 的效果与标准 Zero-shot 几乎没有差异；只有当模型超过某个临界规模（约 10B–60B），推理收益才开始显著体现，且<strong>随规模持续增长</strong>。这排除了 CoT 效果仅仅是"更好的 prompt 格式"的解释——如果只是格式问题，小型模型也应该受益。
+  </p>
+
+  <div class="callout insight">
+    <strong>💡 深层 Insight：</strong> 这种涌现模式暗示预训练语料中<strong>天然包含了链式推理的文本模式</strong>（如教科书、论坛解题帖），足够大的模型有能力将这些模式"内化"为可调用的能力。Zero-shot-CoT 的作用不是"教"模型推理，而是提供了一个<strong>检索键（retrieval key）</strong>，将预训练中已编码的推理模式"调取"出来。
+  </div>
+</section>
+
+<!-- ===== 5. 深入分析 ===== -->
+<section class="section" id="analysis">
+  <h2>🔬 深入分析</h2>
+
+  <h3>错误分析（Table 3 & Appendix）</h3>
+
+  <p>论文提供了定性错误案例，揭示了 Zero-shot-CoT 的几个典型失败模式：</p>
+
+  <div class="card">
+    <h4>失败模式 1：正确推理，错误选择</h4>
+    <p style="font-size:14px;color:var(--text-tertiary);margin-bottom:12px;">CommonsenseQA 示例：</p>
+    <div style="background:var(--bg-tertiary);border-radius:8px;padding:16px;margin-bottom:12px;">
+      <strong>Q:</strong> Where is a well used toy car likely to be found?<br>
+      <strong>模型推理:</strong> "A well used toy car is likely to be found in a child's room. A child's room is in a house."<br>
+      <strong>模型预测:</strong> E (house) &nbsp;&nbsp; <strong>正确答案:</strong> A (child's room)
+    </div>
+    <p style="font-size:13px;color:var(--text-secondary);">推理过程完全正确！模型正确地推理出了"玩具车→儿童房→房子"的链条，但在最后一步选择时，它选择了<strong>过于宽泛</strong>的上位概念"house"而非更精确的"child's room"。这说明模型虽然能生成合理的推理链，但<strong>推理链与最终答案之间的对齐仍然脆弱</strong>。</p>
+  </div>
+
+  <div class="card">
+    <h4>失败模式 2：推理正确但输出多个答案</h4>
+    <p style="font-size:14px;color:var(--text-tertiary);margin-bottom:12px;">CommonsenseQA 示例：</p>
+    <div style="background:var(--bg-tertiary);border-radius:8px;padding:16px;margin-bottom:12px;">
+      <strong>Q:</strong> What would be necessary for getting in shape?<br>
+      <strong>模型推理:</strong> 详细列出运动、饮食、睡眠等多种方案<br>
+      <strong>模型预测:</strong> B, C, and D &nbsp;&nbsp; <strong>正确答案:</strong> B (exercise)
+    </div>
+    <p style="font-size:13px;color:var(--text-secondary);">模型进行了详尽的推理，但<strong>无法在多个合理选项间做出选择</strong>，最终给出了多个答案。这暴露了 Zero-shot-CoT 在<strong>需要精确排歧的任务</strong>上的局限性。</p>
+  </div>
+
+  <div class="callout warning">
+    <strong>其他错误模式：</strong>
+    <ul style="margin-top:8px; line-height:1.8;">
+      <li><strong>过度推理（Over-reasoning）：</strong>模型在已经得到正确答案后继续推理，导致后续步骤改写了正确结论</li>
+      <li><strong>伪推理（Pseudo-reasoning）：</strong>模型生成的"推理"实际上只是对问题的改写（rephrase），而非真正的逐步演绎</li>
+      <li><strong>三元运算失败：</strong>Few-shot-CoT 在涉及三元逻辑的推理链中容易出错，这与 Zero-shot-CoT 的失败模式有所不同</li>
+    </ul>
+  </div>
+
+  <h3>模板鲁棒性分析（Table 4）</h3>
+  <p>论文测试了 <strong>16 种不同的 trigger 模板</strong>，按性质分为三类。实验在 MultiArith 上用 text-davinci-002 进行：</p>
+
+  <div class="table-wrapper">
+    <table>
+      <thead><tr><th>类型</th><th>#</th><th>Trigger 模板</th><th>准确率</th></tr></thead>
+      <tbody>
+        <tr style="background:#e8f8ed;"><td rowspan="9"><strong>引导型<br>Instructive</strong></td><td>1</td><td><code>Let's think step by step.</code></td><td><strong class="best">78.7</strong></td></tr>
+        <tr style="background:#e8f8ed;"><td>2</td><td><code>First,</code></td><td>77.3</td></tr>
+        <tr style="background:#e8f8ed;"><td>3</td><td><code>Let's think about this logically.</code></td><td>74.5</td></tr>
+        <tr style="background:#e8f8ed;"><td>4</td><td><code>Let's solve this problem by splitting it into steps.</code></td><td>72.2</td></tr>
+        <tr style="background:#e8f8ed;"><td>5</td><td><code>Let's be realistic and think step by step.</code></td><td>70.8</td></tr>
+        <tr style="background:#e8f8ed;"><td>6</td><td><code>Let's think like a detective step by step.</code></td><td>70.3</td></tr>
+        <tr style="background:#e8f8ed;"><td>7</td><td><code>Let's think</code></td><td>57.5</td></tr>
+        <tr style="background:#e8f8ed;"><td>8</td><td><code>Before we dive into the answer,</code></td><td>55.7</td></tr>
+        <tr style="background:#e8f8ed;"><td>9</td><td><code>The answer is after the proof.</code></td><td>45.7</td></tr>
+        <tr style="background:#ffe8e8;"><td rowspan="4"><strong>误导型<br>Misleading</strong></td><td>10</td><td><code>Don't think. Just feel.</code></td><td>18.8</td></tr>
+        <tr style="background:#ffe8e8;"><td>11</td><td><code>Let's think step by step but reach an incorrect answer.</code></td><td>18.7</td></tr>
+        <tr style="background:#ffe8e8;"><td>12</td><td><code>Let's count the number of 'a' in the question.</code></td><td>16.7</td></tr>
+        <tr style="background:#ffe8e8;"><td>13</td><td><code>By using the fact that the earth is round,</code></td><td>9.3</td></tr>
+        <tr style="background:#f5f5f7;"><td rowspan="3"><strong>无关型<br>Irrelevant</strong></td><td>14</td><td><code>By the way, I found a good restaurant nearby.</code></td><td>17.5</td></tr>
+        <tr style="background:#f5f5f7;"><td>15</td><td><code>Abrakadabra!</code></td><td>15.5</td></tr>
+        <tr style="background:#f5f5f7;"><td>16</td><td><code>It's a beautiful day.</code></td><td>13.1</td></tr>
+        <tr><td colspan="3" style="font-weight:600;">Zero-shot baseline（无 trigger）</td><td>17.7</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tag-list">
+    <span class="tag good">✓ 引导推理的模板效果显著</span>
+    <span class="tag bad">✗ 误导型可严重损害性能</span>
+    <span class="tag neutral">— 无关型 ≈ Zero-shot baseline</span>
+  </div>
+
+  <h4>关键结论</h4>
+  <ul style="margin:16px 0 16px 32px; line-height:2;">
+    <li><strong>"Let's think step by step" 不是魔法：</strong>多种包含"逐步思考"语义的模板都能取得类似效果，说明核心机制是<strong>激活推理模式</strong>而非特定词语</li>
+    <li><strong>极简模板也能工作：</strong>仅一个词 <code>"First,"</code> 就能达到 77.3%，接近最佳效果。这说明甚至不需要完整的推理指令</li>
+    <li><strong>误导型模板有显著负面效果：</strong><code>"Don't think. Just feel."</code> (18.8%) 和故意要求错误答案 (18.7%) 都能将性能拉低到零样本基线以下。这说明模型<strong>确实在"遵循指令"</strong>而非简单地忽略 prompt</li>
+    <li><strong>无关模板无害：</strong>"附近有家好餐厅" (17.5%) 和 "Abrakadabra!" (15.5%) 基本不影响性能。这类不鼓励也不阻止推理的 prompt，模型<strong>默认不做推理</strong></li>
+  </ul>
+
+  <div class="callout insight">
+    <strong>💡 这暗示了一种类似"注意力引导"的机制：</strong> trigger 的作用不是提供新信息，而是将模型的生成分布<strong>从"直接回答"模式切换到"推理后回答"模式</strong>。这类似于人类认知中的"启动效应"——一句简单的提示就能改变思维路径。
+  </div>
+
+  <h3>Cross-domain Prompt Sensitivity (Table 5)</h3>
+  <p>测试 Few-shot-CoT 在使用<strong>跨领域示例</strong>时的表现：</p>
+
+  <div class="table-wrapper">
+    <table>
+      <thead><tr><th>方法</th><th>AQUA-RAT</th><th>MultiArith</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>Zero-shot</td><td>22.4</td><td>17.7</td><td>无示例</td></tr>
+        <tr><td>Few-shot-CoT (CommonsenseQA exemplars)</td><td>31.9</td><td>27.0</td><td>常识推理示例→算术任务（格式+领域均不同）</td></tr>
+        <tr class="highlight"><td><strong>Zero-shot-CoT</strong></td><td><strong>33.5</strong></td><td><strong>78.7</strong></td><td>零示例，仅 trigger</td></tr>
+        <tr><td>Few-shot-CoT (task-matched)</td><td>39.0</td><td>88.2</td><td>任务匹配的推理示例</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    当 CommonsenseQA 的推理示例被用于 AQUA-RAT 时（两者都是多选题格式），性能仍有提升（22.4% → 31.9%）。但用于 MultiArith（数值答案格式）时，提升很小（17.7% → 27.0%）。<strong>这支持了 Min et al. (2022) 的发现：</strong>LLM 从少样本示例中主要学习的是<strong>答案格式</strong>和<strong>输出模式</strong>，而非任务本身的推理逻辑。Zero-shot-CoT 完全绕过了这个问题——因为它根本不需要示例。
+  </p>
+</section>
+
+<!-- ===== 6. 讨论与相关工作 ===== -->
+<section class="section" id="discussion">
+  <h2>📚 讨论与相关工作</h2>
+
+  <h3>推理能力的谱系</h3>
+  <p>论文将 LLM 推理研究组织为以下谱系，清晰地定位了 Zero-shot-CoT 的位置：</p>
+
+  <div class="table-wrapper">
+    <table>
+      <thead><tr><th>方法</th><th>类别</th><th>CoT?</th><th>任务</th><th>模型</th><th>需要人工?</th></tr></thead>
+      <tbody>
+        <tr><td>Rajani et al. (2019)</td><td>微调</td><td>✓</td><td>CR</td><td>GPT</td><td>标注数据</td></tr>
+        <tr><td>Cobbe et al. (2021)</td><td>微调</td><td>✓</td><td>AR</td><td>GPT-3</td><td>标注数据+验证器</td></tr>
+        <tr><td>Zelikman et al. (2022)</td><td>微调</td><td>✓</td><td>AR, CR</td><td>GPT-3</td><td>标注数据</td></tr>
+        <tr><td>Brown et al. (2020)</td><td>Few/Zero-shot</td><td>✗</td><td>CR</td><td>GPT-3</td><td>少/无</td></tr>
+        <tr><td>Wei et al. (2022)</td><td>Few-shot</td><td>✓</td><td>AR, CR, SR</td><td>PaLM, GPT-3</td><td>8个手工推理示例</td></tr>
+        <tr><td>Wang et al. (2022)</td><td>Few-shot</td><td>✓</td><td>AR, CR</td><td>PaLM</td><td>8个手工推理示例</td></tr>
+        <tr><td>Reynolds & McDonell (2021)</td><td>Zero-shot</td><td>✓</td><td>AR</td><td>GPT-3</td><td>任务特定 prompt</td></tr>
+        <tr><td>Shwartz et al. (2020)</td><td>Zero-shot</td><td>✓</td><td>CR</td><td>GPT-2</td><td>大量手工 prompt 工程</td></tr>
+        <tr style="background:var(--accent-light);"><td><strong>Zero-shot-CoT (本文)</strong></td><td><strong>Zero-shot</strong></td><td><strong>✓</strong></td><td><strong>AR, CR, SR, LR</strong></td><td><strong>PaLM, GPT-3, InstructGPT</strong></td><td><strong>一行 trigger，零示例</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>从"窄泛化"到"广泛化"</h3>
+  <p>论文提出了一个重要的概念区分：</p>
+  <div class="info-grid">
+    <div class="info-card">
+      <div class="label">窄泛化 (Narrow Generalization)</div>
+      <div class="value" style="font-size:14px;">大多数 prompt 方法是<strong>任务特定</strong>的——为每个任务手工设计 prompt。这激发的是<strong>狭窄的任务技能</strong>，类似于传统机器学习中的监督学习范式。</div>
+    </div>
+    <div class="info-card">
+      <div class="label">广泛化 (Broad Generalization)</div>
+      <div class="value" style="font-size:14px;">Zero-shot-CoT 使用<strong>单个任务无关的 prompt</strong>，跨越算术、常识、符号、逻辑等多种推理类型。它激活的是<strong>更底层、更通用的认知能力</strong>——逻辑推理本身。</div>
+    </div>
+  </div>
+
+  <p>这种区分借鉴了认知心理学中的智力层级模型（Cattell-Horn-Carroll theory），暗示 LLM 中可能存在类似人类"流体智力"（fluid intelligence）的通用推理因子。</p>
+
+  <h3>局限性与社会影响</h3>
+  <div class="card">
+    <h4>⚠️ 已知局限</h4>
+    <ul style="margin-left:20px; line-height:1.8;">
+      <li><strong>训练数据不透明：</strong>所用 LLM 的训练数据细节不可知（尤其是闭源模型如 InstructGPT）。尽管在多模型、多任务上的一致性结果为"模型不是简单记忆"提供了证据，但无法完全排除数据污染的可能性</li>
+      <li><strong>推理质量的不可控性：</strong>模型生成的推理链可能包含事实错误、逻辑谬误，但最终答案恰好正确（或相反）——模型缺乏对自身推理的"元认知"能力</li>
+      <li><strong>性能天花板：</strong>Zero-shot-CoT 单独使用仍远落后于 Few-shot-CoT + self-consistency。单条推理路径的可靠性有限</li>
+      <li><strong>常识推理不适用：</strong>该方法在常识推理任务上无益甚至有害，限制其作为"通用推理增强器"的适用范围</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ===== 7. 犀利评论 ===== -->
+<section class="section" id="review">
+  <h2>✍️ 犀利评论（Reviewer's Perspective）</h2>
+
+  <div class="review-card">
+    <div class="score">综合评分: 8/10 &nbsp;·&nbsp; Strong Accept</div>
+
+    <h3>总体评价</h3>
+    <p style="color:rgba(255,255,255,0.85); line-height:1.8; margin-bottom:28px;">
+      这可能是 2022 年 prompt engineering 领域<strong>投入产出比最高的论文</strong>。以"一句话的改动"撬动了最大 78 个百分点的性能跃升，揭露了 LLM 中被严重低估的零样本推理潜力。论文的优雅之处在于其<strong>极简主义方法论</strong>——证明了真正的科学发现有时不需要复杂的新架构，而是需要提出正确的问题。作为 NeurIPS 2022 论文，它确实提供了一个"改变社区视角"的贡献：从此以后，任何声称 LLM 在推理任务上表现不佳的研究，都必须认真考虑是否用对了 prompt。
+    </p>
+
+    <div class="review-grid">
+      <div class="review-item">
+        <h4>✅ 优势</h4>
+        <ul>
+          <li><strong>极度简洁且优雅：</strong>一个 prompt 解决所有任务，可复现性极强</li>
+          <li><strong>实验覆盖面广：</strong>12 个数据集 × 4 类推理 × 17 个模型，结论具有足够的统计力度</li>
+          <li><strong>模板鲁棒性分析：</strong>Table 4 是论文中最被低估的部分。16 种模板的消融实验系统地证明了"推理引导"机制而非特定词语的作用</li>
+          <li><strong>概念贡献清晰：</strong>"窄泛化 vs 广泛化"的区分有理论深度，为后续研究提供了有价值的分析框架</li>
+          <li><strong>基线设置严谨：</strong>确定了 zero-shot 推理的强基线，此后所有 CoT 相关研究都必须和 Zero-shot-CoT 对比</li>
+          <li><strong>诚实面对局限：</strong>明确报告了常识推理上的失效，没有过度宣称</li>
+        </ul>
+      </div>
+      <div class="review-item">
+        <h4>⚠️ 不足</h4>
+        <ul>
+          <li><strong>缺乏"为什么有效"的机制解释：</strong>论文停留在现象层面。为什么 "Let's think step by step" 有效？模型内部发生了什么？没有提供任何 probing 或 mechanistic interpretability 的分析</li>
+          <li><strong>缺乏对比的零样本变体：</strong>没有探索其他可能的零样本推理策略。例如："Let's verify step by step" 或 "Let's break this down" 的效果？仅 16 个模板的覆盖范围仍显有限</li>
+          <li><strong>对"不成功"案例的分析不足：</strong>CommonsenseQA 为什么不行？只有 2 个定性示例。<strong>定量统计</strong>常识推理中各种错误类型的分布会更有价值</li>
+          <li><strong>计算成本未被讨论：</strong>Two-stage prompting 需要两次前向传播，token 消耗翻倍。对于大规模部署，这是不容忽视的成本。论文未提供任何效率分析</li>
+          <li><strong>与 instruction tuning 的关系未厘清：</strong>InstructGPT-3 (text-davinci-002) 上的效果远好于原始 GPT-3——instruction tuning 贡献了多少？能否分解出 instruction tuning 和 CoT prompting 各自的作用？</li>
+          <li><strong>统计显著性检验缺失：</strong>所有结果仅报告了单次运行的准确率，没有置信区间或多次运行的方差</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3 style="margin-top:32px;">🔮 可能的改进方向</h3>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top:16px;">
+      <div style="background:rgba(255,255,255,0.06); border-radius:12px; padding:20px;">
+        <div style="font-weight:700; margin-bottom:8px; color:var(--accent);">1. 机制可解释性</div>
+        <p style="font-size:13px; color:rgba(255,255,255,0.7); line-height:1.6;">
+          使用 mechanistic interpretability 工具（如 activation patching, logit lens）分析 trigger 如何改变模型的内部计算路径。推理模式是预训练中就存在的"电路"，还是 prompt 组合出的临时计算？
+        </p>
+      </div>
+      <div style="background:rgba(255,255,255,0.06); border-radius:12px; padding:20px;">
+        <div style="font-weight:700; margin-bottom:8px; color:var(--accent);">2. 自适应 Trigger 选择</div>
+        <p style="font-size:13px; color:rgba(255,255,255,0.7); line-height:1.6;">
+          不同任务可能受益于不同 trigger。能否学习一个 trigger selector？类似 soft prompt tuning，但保持自然语言的离散性。
+        </p>
+      </div>
+      <div style="background:rgba(255,255,255,0.06); border-radius:12px; padding:20px;">
+        <div style="font-weight:700; margin-bottom:8px; color:var(--accent);">3. 多轮自修正</div>
+        <p style="font-size:13px; color:rgba(255,255,255,0.7); line-height:1.6;">
+          针对"正确推理但错误答案"的失败模式，引入 self-verification 机制。模型生成推理后，用另一个 prompt 让模型检查自己的推理是否有误。
+        </p>
+      </div>
+      <div style="background:rgba(255,255,255,0.06); border-radius:12px; padding:20px;">
+        <div style="font-weight:700; margin-bottom:8px; color:var(--accent);">4. 单阶段合并</div>
+        <p style="font-size:13px; color:rgba(255,255,255,0.7); line-height:1.6;">
+          将两阶段合并为一个 prompt，减少计算开销。可探索 "Q: [X]. A: Let's think step by step. [推理] Therefore, the answer is [答案]" 的单次生成范式。
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== 8. One More Thing ===== -->
+<section class="section" id="onemore">
+  <h2>🍎 One More Thing</h2>
+
+  <h3>这篇论文的历史定位——一个被低估的范式转变</h3>
+
+  <p>
+    回看 2022 年这个时间节点，Zero-shot-CoT 的意义远超一篇 NeurIPS 论文。它为后续的一系列关键发展奠定了<strong>哲学基础</strong>：
+  </p>
+
+  <div class="card">
+    <h4>🧬 影响链：从 Zero-shot-CoT 到现代推理 Agent</h4>
+    <div style="font-size:14px; line-height:2; color:var(--text-tertiary);">
+      <strong>Zero-shot-CoT (2022.05)</strong> — "推理不需要示例"<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;↳ <strong>Self-Consistency (Wang et al., 2022)</strong> — 多条推理路径投票<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ <strong>Tree of Thoughts (Yao et al., 2023)</strong> — 树搜索式推理<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ <strong>Graph of Thoughts (Besta et al., 2023)</strong> — 图结构推理<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ <strong>ReAct (Yao et al., 2023)</strong> — 推理+行动交织<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ <strong>现代 Agent 框架</strong> — AutoGPT, LangChain agents, etc.
+    </div>
+  </div>
+
+  <h3>鲜为人知的细节：论文中那些"隐藏的宝藏"</h3>
+
+  <div class="info-grid">
+    <div class="info-card">
+      <div class="label">🔑 被忽略的细节 1</div>
+      <div class="value" style="font-size:14px;">
+        <strong>First, 一个词就够了。</strong>Table 4 中仅一个词 <code>"First,"</code> 就能达到 77.3%（vs 最优 78.7%）。这说明推理激活的"触发条件"可能比想象的更简单——甚至可能只是一个<strong>阻止模型直接输出答案的 token</strong>。这引发了一个好玩的想法：Zero-shot-CoT 的收益可能部分来自<strong>增加了计算量</strong>——模型生成了更多 token，自然有更多"思考时间"（类似人类的"慢下来想一想"）。
+      </div>
+    </div>
+    <div class="info-card">
+      <div class="label">🔑 被忽略的细节 2</div>
+      <div class="value" style="font-size:14px;">
+        <strong>Coin Flip 上的 91.4% 几乎完美。</strong>一个"跟踪硬币正反面"的简单任务，标准 Zero-shot 仅 12.8%（接近随机），Zero-shot-CoT 却能到 91.4%。这个 78.6 个百分点的提升是<strong>全表最大</strong>。它说明模型在预训练中<strong>肯定见过类似的状态跟踪模式</strong>（可能在代码或逻辑谜题中），只是需要合适的 prompt 来"解锁"这个能力。
+      </div>
+    </div>
+  </div>
+
+  <h3>可复现性清单（Reproducibility Checklist）</h3>
+  <p>基于论文附录，以下是可以完整复现实验所需的所有关键信息：</p>
+
+  <div class="table-wrapper">
+    <table>
+      <thead><tr><th>维度</th><th>细节</th></tr></thead>
+      <tbody>
+        <tr><td><strong>代码</strong></td><td><a href="https://github.com/kojima-takeshi188/zero_shot_cot" style="color:var(--accent);">github.com/kojima-takeshi188/zero_shot_cot</a></td></tr>
+        <tr><td><strong>Prompt 模板 (Stage 1)</strong></td><td><code>"Q: [question]\nA: Let's think step by step."</code> 或 <code>"A: Let's think step by step."</code></td></tr>
+        <tr><td><strong>Prompt 模板 (Stage 2, 数值)</strong></td><td><code>"[full_stage1_output]\nTherefore, the answer (arabic numerals) is"</code></td></tr>
+        <tr><td><strong>Prompt 模板 (Stage 2, 多选)</strong></td><td><code>"[full_stage1_output]\nTherefore, among A through E, the answer is"</code></td></tr>
+        <tr><td><strong>解码</strong></td><td>temperature=0 (OpenAI), TopK=1 (PaLM), greedy only</td></tr>
+        <tr><td><strong>max_tokens</strong></td><td>128 (GPT-3 系列), 256 (PaLM)</td></tr>
+        <tr><td><strong>Stop sequence</strong></td><td>"Q:" for non-InstructGPT models</td></tr>
+        <tr><td><strong>Answer cleansing (数值)</strong></td><td>remove commas → regex <code>-?\d+\.?\d*</code> → first match</td></tr>
+        <tr><td><strong>Answer cleansing (多选)</strong></td><td>regex <code>[ABCDE]</code> → first match</td></tr>
+        <tr><td><strong>Answer cleansing (是/否)</strong></td><td>lowercase → remove quotes/newlines/periods/colons/commas → split → match yes/no</td></tr>
+        <tr><td><strong>数据集来源</strong></td><td>Last Letter & Coin Flip 用 <code>names-dataset</code> Python 库构建，其他均使用公开数据集的标准测试集</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout insight" style="margin-top:32px;">
+    <strong>🔮 最后的思考：什么是"理解"？</strong><br><br>
+    这篇论文迫使 NLP 社区重新思考一个根本问题：如果模型在不对 prompt 做任何改动的情况下就能从"完全不会推理"切换到"相当擅长推理"，那么推理能力到底<strong>已经存在于模型中</strong>（潜伏的）还是<strong>由 prompt 构造出来的</strong>（涌现的）？<br><br>
+    这个问题至今没有定论。但 Zero-shot-CoT 的价值恰恰在于：它用一个<strong>几乎不可能更简单的实验</strong>，优雅地将这个深刻的问题摆在了所有人面前。对于任何声称要"理解" LLM 能力的研究者来说，这篇论文都是一篇<strong>必读的现代经典</strong>。
+  </div>
+</section>
+
+<!-- ===== Footer ===== -->
+<footer style="border-top:1px solid var(--border-light); margin-top:80px; padding-top:32px; text-align:center;">
+  <p style="font-size:13px; color:var(--text-secondary);">
+    基于 <strong>Kojima et al. (2022)</strong> — <em>Large Language Models are Zero-Shot Reasoners</em> — NeurIPS 2022<br>
+    论文原文: <a href="https://ar5iv.labs.arxiv.org/html/2205.11916" style="color:var(--accent);">ar5iv HTML</a> &nbsp;·&nbsp;
+    arXiv: <a href="https://arxiv.org/abs/2205.11916" style="color:var(--accent);">2205.11916</a> &nbsp;·&nbsp;
+    代码: <a href="https://github.com/kojima-takeshi188/zero_shot_cot" style="color:var(--accent);">GitHub</a><br>
+    <span style="font-size:11px;">本页面为深度解读与可视化，非原论文内容。公式渲染由 <a href="https://katex.org" style="color:var(--accent);">KaTeX</a> 提供。</span>
+  </p>
+</footer>
+
+</main>
+
+<!-- ===== KaTeX Auto-render ===== -->
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  renderMathInElement(document.body, {
+    delimiters: [
+      {left: "$$", right: "$$", display: true},
+      {left: "$", right: "$", display: false},
+      {left: "\\[", right: "\\]", display: true},
+      {left: "\\(", right: "\\)", display: false}
+    ],
+    throwOnError: false
+  });
+
+});
+
+// Active nav link highlighting
+const sections = document.querySelectorAll('section[id]');
+const navLinks = document.querySelectorAll('nav a');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(s => {
+    if (window.scrollY >= s.offsetTop - 120) {
+      current = s.getAttribute('id');
+    }
+  });
+  navLinks.forEach(a => {
+    a.classList.remove('active');
+    if (a.getAttribute('href') === '#' + current) {
+      a.classList.add('active');
+    }
+  });
+});
+</script>
+
+</body>
+</html>
