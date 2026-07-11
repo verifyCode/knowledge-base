@@ -1,13 +1,28 @@
-# Core: ReAct Agent (ModernAgent/ReAct/)
+# ==============================================
+# Jupyter 笔记环境（神经网络基础笔记、日常学习）
+# ==============================================
+jupyterlab>=4.0
+ipykernel>=7.0
+nbdime>=4.0
+numpy>=1.26
+matplotlib>=3.8
+
+# ==============================================
+# ReAct Agent (ModernAgent/ReAct/)
+# ==============================================
 anthropic>=0.115.0
 python-dotenv>=1.0.0
 
+# ==============================================
 # LangChain Agent (ModernAgent/langchain/)
+# ==============================================
 langchain>=1.0.0
 langchain-anthropic>=1.0.0
 langchain-core>=1.0.0
 
+# ==============================================
 # LangGraph Agent (ModernAgent/langgraph/)
+# ==============================================
 langgraph>=1.0.0
 langgraph-checkpoint>=4.0.0
 langgraph-prebuilt>=1.0.0
