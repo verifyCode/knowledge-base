@@ -113,6 +113,10 @@ ehthumbs.db
 *.7z
 *.rar
 
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb.checkpoints
+
 # Temporary files
 *.tmp
 *.swp
